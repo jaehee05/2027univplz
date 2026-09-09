@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// 기출 · 해설 PDF 는 teacher 만 읽고 쓴다.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isTeacher() {
+      return request.auth != null && request.auth.token.role == 'teacher';
+    }
+
+    match /exams/{univId}/{examId}/{fileName} {
+      allow read: if isTeacher();
+      allow write: if isTeacher()
+        && request.resource.size < 40 * 1024 * 1024
+        && request.resource.contentType == 'application/pdf';
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

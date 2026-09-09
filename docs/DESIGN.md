@@ -1,0 +1,154 @@
+# 인문 논술 첨삭 웹 서비스 — 설계
+
+대학별 인문 논술 기출·모범답안을 분석해 채점 기준을 만들고, 학생이 웹 원고지에 쓴 답안을
+Claude API로 첨삭하는 서비스. 문제지·답안지·첨삭 결과는 모두 A4 인쇄 가능.
+
+- 대상 대학: 홍익대, 단국대, 건국대, 동국대, 국민대, 아주대 (관리 화면에서 추가·삭제)
+- 인문 논술만 다룬다. 문항에 `원고지 / 자유 서식` 타입 필드만 두고 수리 서식은 구현하지 않는다.
+
+## 기술 스택
+
+| 영역 | 선택 |
+|---|---|
+| 프레임워크 | Next.js 16 (App Router) + TypeScript + Tailwind v4, Vercel Pro 배포 |
+| 인증 | Firebase Auth (이메일/비밀번호 + Google) → 서버는 httpOnly 세션 쿠키 |
+| DB | Firestore |
+| 파일 | Firebase Storage (기출·해설 PDF) |
+| LLM | Claude API — 첨삭·분석 `claude-opus-5`, PDF 텍스트화 `claude-haiku-4-5` (환경변수 교체 가능) |
+
+- Claude 호출은 Route Handler(서버)에서만. `ANTHROPIC_API_KEY`는 클라이언트에 노출하지 않는다.
+- 서비스 계정은 `FIREBASE_SERVICE_ACCOUNT_KEY`(JSON 한 줄 문자열) 환경변수. 코드·문서에 값이 들어가지 않는다.
+
+## 원고지 규격
+
+첨부된 연세대 2027 인문계열 답안지(`docs/reference/yonsei-2027-answer-sheet.pdf`)를 실측한 기본값.
+
+| 항목 | 값 |
+|---|---|
+| 첫 줄 | 35칸 (왼쪽 3칸은 `문제 1-1` 라벨) |
+| 둘째 줄부터 | 38칸 |
+| 누적 글자 수 눈금 | 우측 여백, 4줄마다 |
+| 최대 글자 수 표시선 | **문항의 "○○자 내외" 조건에서 계산** (고정값 아님) |
+
+- `charTarget`(문항이 요구하는 글자 수) + `tolerance`(기본 ±10%)로 허용 범위를 잡는다.
+  예) 600자 내외 → 540~660자. 표시선은 목표 위치에 진하게, 상·하한에 옅게.
+- 총 줄 수는 `ceil((허용 상한 + 라벨 칸) / 38) + 여유 2줄`로 문항마다 생성한다.
+- 대학별 `manuscriptSpec`으로 칸 수·줄 수·눈금 간격을 덮어쓸 수 있다.
+
+## 디렉터리 구조
+
+```
+src/
+├─ app/
+│  ├─ (auth)/login · signup
+│  ├─ (student)/dashboard · write/[assignmentId] · results/[correctionId]
+│  ├─ (teacher)/admin/…  (universities · exams · analysis · students · answers · corrections)
+│  ├─ print/exam · sheet · answer · correction
+│  └─ api/…
+├─ components/  manuscript/ · correction/ · admin/ · auth/
+├─ lib/
+│  ├─ firebase/client.ts · admin.ts
+│  ├─ auth/session.ts · dal.ts · client.ts
+│  ├─ anthropic/  · manuscript/  · pdf/  · types/
+│  └─ env.ts
+└─ proxy.ts            # 낙관적 리다이렉트 (Next 16에서 middleware → proxy)
+prompts/               # 프롬프트를 파일로 분리해 수정 가능하게
+```
+
+## Firestore 스키마
+
+```
+users/{uid}              role, email, displayName, teacherId?, active, createdAt
+invites/{code}           role, label, createdBy, createdAt, expiresAt, usedBy?, usedAt?
+meta/system              teacherBootstrapped, firstTeacherUid
+
+universities/{univId}    name, slug, order, active, manuscriptSpec
+  exams/{examId}         year, title, questionPdf{storagePath,extraction,…}, solutionPdf{…}
+    questions/{qId}      number, prompt, passages[], charTarget, tolerance, points,
+                         answerFormat, modelAnswer, manuscriptSpecOverride?
+  analyses/{analysisId}  scope('exam'|'aggregate'), questionTypes[], rubric{items[],deductions[]},
+                         answerStyle{}, modelAnswerPatterns[], status('draft'|'confirmed'), version
+
+assignments/{id}         studentId, univId, examId, questionId, assignedBy, dueAt, status
+answers/{id}             studentId, assignmentId, text, charCount, status('draft'|'submitted')
+  versions/{vid}         text, charCount, savedAt, reason   # 불변
+corrections/{id}         answerId, studentId, status, scores{}, inlineComments[], overall{},
+                         revisedExample, teacherEdits?, published, usage{}
+```
+
+인라인 코멘트 위치는 **원문 문자 오프셋**으로 저장한다. 원고지 칸 좌표는 렌더 시 계산하므로
+규격이 바뀌어도 코멘트가 깨지지 않는다.
+
+## 보안 규칙 요지 (`firestore.rules`)
+
+- `role`은 `users/{uid}.role`에만 있고 클라이언트는 쓰지 못한다. 서버가 custom claim에도 동기화한다.
+- 학생은 자기 답안만 읽고 쓰며, `submitted` 이후에는 수정할 수 없다.
+- 첨삭 결과는 teacher가 `published: true`로 바꾸기 전에는 학생이 읽을 수 없다 (규칙 레벨 차단).
+- 채점 기준 확정본·첨삭 결과·사용자 문서는 Admin SDK만 쓴다.
+- Storage의 기출 PDF는 teacher만 읽고 쓴다 (40MB, `application/pdf` 제한).
+
+## API 라우트
+
+```
+POST   /api/auth/session            로그인 (ID 토큰 → 세션 쿠키)
+DELETE /api/auth/session            로그아웃
+POST   /api/auth/register           가입 확정 (첫 사용자=teacher, 이후=초대 코드)
+GET    POST /api/invites            초대 코드 목록 · 발급 (teacher)
+
+GET    POST /api/universities            · PATCH DELETE /api/universities/[id]
+POST   /api/exams                        연도 생성
+POST   /api/exams/[id]/upload-url        Storage 업로드용 서명 URL
+POST   /api/exams/[id]/extract           PDF 텍스트 추출 (pdfjs → Claude 폴백)
+POST   /api/exams/[id]/parse-questions   문항 파싱
+POST   /api/exams/[id]/analyze           채점 기준 분석 (SSE)
+POST   /api/universities/[id]/aggregate  연도별 → 대학 통합본
+PATCH  /api/analyses/[id]                수정 · 확정
+
+POST   /api/assignments                  과제 배정
+PUT    /api/answers/[id]                 자동 저장
+POST   /api/answers/[id]/submit          제출 (버전 스냅샷)
+
+POST   /api/corrections                  첨삭 잡 생성
+GET    /api/corrections/[id]             폴링
+GET    /api/corrections/[id]/stream      SSE 진행
+PATCH  /api/corrections/[id]             점수·코멘트 수정 · 공개 (teacher)
+```
+
+## Claude 호출 설계
+
+| 용도 | 입력 | 출력 |
+|---|---|---|
+| PDF 텍스트화 | `document`(base64 PDF) — pdfjs 추출 글자 수가 임계치 미만일 때만 | 텍스트 |
+| 문항 파싱 | 문제 PDF 텍스트 | 문항 배열 |
+| 채점 기준 분석 | 문제 + 해설 텍스트 | `question_types` / `rubric` / `answer_style` / `model_answer_patterns` |
+| 첨삭 | 답안 + 논제 + 제시문 + 확정 rubric + 모범답안 | `scores` / `inline_comments` / `overall` / `revised_example` |
+
+- JSON은 structured outputs(`output_config.format`)로 스키마를 강제하고, 실패 시 1회 재시도 후 오류 상태 저장.
+- 논제·제시문·rubric은 prompt caching 대상으로 앞쪽에 고정 배치 (같은 문항 여러 학생 첨삭 시 비용 절감).
+- 긴 출력이므로 streaming 사용. Vercel Pro의 `maxDuration`을 넉넉히 잡고, 연결이 끊겨도 폴링으로 복구한다.
+- 해설에 명시된 기준은 그대로 쓰고, 없으면 모범답안에서 추론한 뒤 `inferred: true`로 표시한다.
+
+## 원고지 작성법 검사
+
+`lib/manuscript/rules.ts`에서 순수 함수로 구현하고, 위반은 첨삭 인라인 코멘트와 **같은 자료 구조**
+(`{ offset, length, rule, message, severity }`)로 반환해 화면에서 함께 표시한다.
+
+`INDENT_FIRST` 문단 첫 칸 비우기 · `PUNCT_LINE_START` 문장부호 줄 첫 칸 금지(앞 줄 마지막 칸 병기) ·
+`SPACE_AT_LINE_START` 줄 첫 칸 띄어쓰기 무시 · `ALNUM_TWO_PER_CELL` 숫자·영문 한 칸 두 자 ·
+`QUOTE_BRACKET` 따옴표·괄호 위치 · `LENGTH` 분량 초과·미달
+
+## 인쇄
+
+`@media print` + 인쇄 전용 페이지로 A4 출력 4종 — ① 문제지 ② 빈 답안지 ③ 작성된 답안지 ④ 첨삭 결과지.
+서버 PDF 생성은 Vercel 환경 제약을 고려해 2차 과제로 둔다.
+
+## 구현 순서
+
+1. **프로젝트 셋업 + Firebase Auth·역할·보안 규칙** ← 완료
+2. 원고지 컴포넌트 + 작성법 검사
+3. PDF 업로드·파싱 + 대학별 채점 기준 분석
+4. 첨삭 API + 결과 화면
+5. 인쇄
+6. 관리 화면 다듬기
+
+기출 PDF가 아직 없으므로 3단계는 더미 기출로 파이프라인을 검증하고, 실제 PDF는 그대로 투입한다.

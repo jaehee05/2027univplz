@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-sans-kr), system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+}

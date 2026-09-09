@@ -1,0 +1,107 @@
+rules_version = '2';
+
+// univplz — 인문 논술 첨삭 서비스
+//
+// 원칙
+//  1) 역할(role)은 users/{uid}.role 에만 존재하고, 클라이언트는 절대 쓰지 못한다.
+//  2) 학생은 자기 답안만 읽고 쓴다.
+//  3) 첨삭 결과는 teacher 가 published=true 로 바꾸기 전에는 학생에게 보이지 않는다.
+//  4) 채점 기준 확정본 · 첨삭 결과 · 사용자 문서는 서버(Admin SDK)만 쓴다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // custom claim 을 우선 보고, 없으면 users 문서를 읽는다(신규 가입 직후 대비).
+    function isTeacher() {
+      return signedIn() && (
+        request.auth.token.role == 'teacher' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && userDoc().role == 'teacher')
+      );
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // ── 사용자 · 초대 ────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if isSelf(uid) || isTeacher();
+      allow write: if false;               // 서버 전용
+    }
+
+    match /invites/{code} {
+      allow read, write: if false;         // 서버 전용
+    }
+
+    match /meta/{docId} {
+      allow read, write: if false;         // 서버 전용
+    }
+
+    // ── 대학 · 기출 · 문항 ───────────────────────────────────────────
+    match /universities/{univId} {
+      allow read: if signedIn();
+      allow write: if isTeacher();
+
+      match /exams/{examId} {
+        allow read: if signedIn();
+        allow write: if isTeacher();
+
+        match /questions/{questionId} {
+          allow read: if signedIn();
+          allow write: if isTeacher();
+        }
+      }
+
+      // 채점 기준 분석 — 학생에게는 공개하지 않는다.
+      match /analyses/{analysisId} {
+        allow read: if isTeacher();
+        allow write: if false;             // 서버 전용(생성 · 확정)
+      }
+    }
+
+    // ── 과제 배정 ────────────────────────────────────────────────────
+    match /assignments/{assignmentId} {
+      allow read: if isTeacher() || isSelf(resource.data.studentId);
+      allow write: if isTeacher();
+    }
+
+    // ── 답안 ────────────────────────────────────────────────────────
+    match /answers/{answerId} {
+      allow read: if isTeacher() || isSelf(resource.data.studentId);
+
+      allow create: if isTeacher() ||
+        (isSelf(request.resource.data.studentId) && request.resource.data.status == 'draft');
+
+      // 학생은 제출 전(draft)까지만 수정할 수 있고, 소유자를 바꿀 수 없다.
+      allow update: if isTeacher() || (
+        isSelf(resource.data.studentId) &&
+        resource.data.status == 'draft' &&
+        request.resource.data.studentId == resource.data.studentId
+      );
+
+      allow delete: if isTeacher();
+
+      match /versions/{versionId} {
+        allow read: if isTeacher() ||
+          isSelf(get(/databases/$(database)/documents/answers/$(answerId)).data.studentId);
+        allow create: if isTeacher() ||
+          isSelf(get(/databases/$(database)/documents/answers/$(answerId)).data.studentId);
+        allow update, delete: if false;    // 버전은 불변
+      }
+    }
+
+    // ── 첨삭 결과 ────────────────────────────────────────────────────
+    match /corrections/{correctionId} {
+      allow read: if isTeacher() ||
+        (isSelf(resource.data.studentId) && resource.data.published == true);
+      allow write: if false;               // 서버 전용
+    }
+  }
+}
