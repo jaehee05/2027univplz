@@ -30,6 +30,7 @@ interface ClovaImage {
   inferResult?: string;
   message?: string;
   fields?: ClovaField[];
+  convertedImageInfo?: { pageIndex?: number };
 }
 
 interface ClovaResponse {
@@ -97,11 +98,22 @@ function joinFields(fields: ClovaField[]): string {
   return lines.join("\n").trim();
 }
 
+/** 글자가 없는 쪽은 실패가 아니라 빈 쪽이다. 표지·간지·원고지 뒷면에서 흔하다. */
+function isBlankPage(image: ClovaImage): boolean {
+  return (image.message ?? "").includes("NO_TEXT");
+}
+
 /**
  * PDF 를 통째로 넘겨 쪽별 글자를 받는다.
  * 응답의 images 한 개가 한 쪽이다.
+ *
+ * @param expectedPages pdfjs 로 센 쪽 수. 이보다 적게 오면 잘린 것으로 보고 실패시킨다.
  */
-export async function ocrWithClova(data: Uint8Array, fileName: string): Promise<string[]> {
+export async function ocrWithClova(
+  data: Uint8Array,
+  fileName: string,
+  expectedPages?: number,
+): Promise<string[]> {
   const invokeUrl = serverEnv.clovaOcrInvokeUrl;
   const secret = serverEnv.clovaOcrSecret;
   if (!invokeUrl || !secret) {
@@ -118,8 +130,6 @@ export async function ocrWithClova(data: Uint8Array, fileName: string): Promise<
       version: "V2",
       requestId: crypto.randomUUID(),
       timestamp: Date.now(),
-      // 표가 많은 시험지에서 칸 구분을 살린다.
-      enableTableDetection: true,
       images: [
         {
           format: "pdf",
@@ -136,15 +146,34 @@ export async function ocrWithClova(data: Uint8Array, fileName: string): Promise<
   }
 
   const result = (await response.json()) as ClovaResponse;
-  const images = result.images ?? [];
+  const images = [...(result.images ?? [])].sort(
+    (a, b) => (a.convertedImageInfo?.pageIndex ?? 0) - (b.convertedImageInfo?.pageIndex ?? 0),
+  );
   if (images.length === 0) {
     throw new Error("CLOVA OCR 이 빈 응답을 돌려줬습니다.");
   }
 
-  const failed = images.find((image) => image.inferResult && image.inferResult !== "SUCCESS");
-  if (failed) {
-    throw new Error(`CLOVA OCR 실패 — ${failed.message ?? failed.inferResult}`);
+  // 쪽 수가 모자라면 뒷부분이 잘린 것이다. 조용히 내용을 잃느니 실패시켜 Claude 로 넘긴다.
+  if (expectedPages && images.length < expectedPages) {
+    throw new Error(
+      `${expectedPages}쪽 중 ${images.length}쪽만 처리했습니다. 뒷부분이 잘려 쓸 수 없습니다.`,
+    );
   }
 
-  return images.map((image) => joinFields(image.fields ?? []));
+  // 글자가 없는 쪽 말고 진짜로 실패한 쪽이 있는지 본다.
+  const broken = images.filter(
+    (image) => image.inferResult !== "SUCCESS" && !isBlankPage(image),
+  );
+  if (broken.length === images.length) {
+    throw new Error(`CLOVA OCR 실패 — ${broken[0].message ?? broken[0].inferResult}`);
+  }
+  if (broken.length > 0) {
+    throw new Error(
+      `${images.length}쪽 중 ${broken.length}쪽을 읽지 못했습니다 — ${broken[0].message ?? broken[0].inferResult}`,
+    );
+  }
+
+  return images.map((image) =>
+    image.inferResult === "SUCCESS" ? joinFields(image.fields ?? []) : "",
+  );
 }

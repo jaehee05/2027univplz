@@ -154,13 +154,16 @@ async function extractPdf(data: Uint8Array, label: string): Promise<ExtractedDoc
   // 한국어 스캔본은 CLOVA OCR 이 더 정확하고 빠르다. 설정돼 있으면 먼저 쓴다.
   if (isClovaConfigured()) {
     try {
-      const pages = await ocrWithClova(data, label);
+      const pages = await ocrWithClova(data, label, pageTexts.length || undefined);
       const total = pages.join("").length;
       if (total > 0) {
+        const blank = pages.filter((page) => page.length === 0).length;
         return {
           method: "clova",
           pageTexts: pages,
-          note: `${reason} — 스캔본으로 보고 CLOVA OCR 로 읽었습니다 (${pages.length}쪽 · ${total}자).`,
+          note:
+            `${reason} — 스캔본으로 보고 CLOVA OCR 로 읽었습니다 (${pages.length}쪽 · ${total}자` +
+            `${blank > 0 ? ` · 글자 없는 쪽 ${blank}개` : ""}).`,
         };
       }
     } catch (error) {

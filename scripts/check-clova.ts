@@ -36,7 +36,6 @@ async function main() {
       version: "V2",
       requestId: crypto.randomUUID(),
       timestamp: Date.now(),
-      enableTableDetection: true,
       images: [{ format: "pdf", name: "check", data: data.toString("base64") }],
     }),
   });
@@ -57,8 +56,13 @@ async function main() {
   images.forEach((image: Record<string, unknown>, index: number) => {
     const fields = (image.fields ?? []) as { inferText?: string; lineBreak?: boolean }[];
     console.log(
-      `\n  [${index + 1}] inferResult=${image.inferResult} · 키 ${Object.keys(image).join(",")} · fields ${fields.length}개`,
+      `\n  [${index + 1}] inferResult=${image.inferResult} · fields ${fields.length}개`,
     );
+    if (image.inferResult !== "SUCCESS") {
+      console.log(`      message=${JSON.stringify(image.message)}`);
+      console.log(`      validationResult=${JSON.stringify(image.validationResult)}`);
+      console.log(`      convertedImageInfo=${JSON.stringify(image.convertedImageInfo)}`);
+    }
     let line = "";
     const lines: string[] = [];
     for (const field of fields) {
