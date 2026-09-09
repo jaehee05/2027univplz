@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 
-import { RUBRIC_TOTAL, rubricTotal, type Analysis, type RubricItem } from "@/lib/types/exam";
+import {
+  RUBRIC_TOTAL,
+  rubricTotalsByQuestion,
+  type Analysis,
+  type RubricItem,
+} from "@/lib/types/exam";
 
 interface Props {
   univId: string;
@@ -33,7 +38,9 @@ export function RubricEditor({ univId, examId, initial, onStatus }: Props) {
   const examBase = `/api/universities/${univId}/exams/${examId}`;
   const analysisBase = `/api/universities/${univId}/analyses/${examId}`;
 
-  const total = analysis ? rubricTotal(analysis.rubric.items) : 0;
+  // 학생은 문항 하나씩 답안을 쓰므로 문항마다 100점이어야 한다.
+  const totals = analysis ? rubricTotalsByQuestion(analysis.rubric.items) : new Map<string, number>();
+  const allHundred = totals.size > 0 && [...totals.values()].every((v) => v === RUBRIC_TOTAL);
   const confirmed = analysis?.status === "confirmed";
 
   function patchLocal(patch: Partial<Analysis>) {
@@ -145,7 +152,12 @@ export function RubricEditor({ univId, examId, initial, onStatus }: Props) {
               <button
                 type="button"
                 onClick={() => void save(confirmed ? "draft" : "confirmed")}
-                disabled={saving || (!confirmed && total !== RUBRIC_TOTAL)}
+                disabled={saving || (!confirmed && !allHundred)}
+                title={
+                  !confirmed && !allHundred
+                    ? "문항마다 배점 합계가 100점이어야 확정할 수 있습니다."
+                    : undefined
+                }
                 className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
               >
                 {confirmed ? "확정 풀기" : "확정"}
@@ -165,21 +177,44 @@ export function RubricEditor({ univId, examId, initial, onStatus }: Props) {
       ) : (
         <div className="mt-4 space-y-6">
           <div>
-            <div className="flex items-baseline justify-between">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h4 className="text-sm font-semibold">배점 항목</h4>
-              <span className={total === RUBRIC_TOTAL ? "text-sm text-neutral-500" : "text-sm font-medium text-red-600"}>
-                합계 {total} / {RUBRIC_TOTAL}점
-              </span>
+              <div className="flex flex-wrap gap-2 text-sm">
+                {[...totals].map(([number, sum]) => (
+                  <span
+                    key={number}
+                    className={
+                      sum === RUBRIC_TOTAL
+                        ? "text-neutral-500"
+                        : "font-medium text-red-600"
+                    }
+                  >
+                    {number ? `${number}번` : "전체"} {sum} / {RUBRIC_TOTAL}
+                  </span>
+                ))}
+              </div>
             </div>
+            <p className="mt-1 text-xs text-neutral-500">
+              학생은 문항 하나씩 답안을 쓰므로, 문항마다 100점이 되어야 확정할 수 있습니다.
+            </p>
 
             <div className="mt-2 space-y-3">
               {analysis.rubric.items.map((item, index) => (
                 <div key={item.id} className="rounded-md border border-neutral-200 p-3">
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      value={item.questionNumber ?? ""}
+                      onChange={(event) =>
+                        updateItem(index, { questionNumber: event.target.value || null })
+                      }
+                      placeholder="문항"
+                      title="이 항목이 어느 문항의 것인지"
+                      className="w-16 rounded-md border border-neutral-300 px-2 py-2 text-center text-sm"
+                    />
                     <input
                       value={item.name}
                       onChange={(event) => updateItem(index, { name: event.target.value })}
-                      className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium"
+                      className="min-w-40 flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium"
                     />
                     <input
                       value={item.points}
@@ -239,6 +274,7 @@ export function RubricEditor({ univId, examId, initial, onStatus }: Props) {
                         ...analysis.rubric.items,
                         {
                           id: `r${analysis.rubric.items.length + 1}-${Date.now()}`,
+                          questionNumber: analysis.rubric.items.at(-1)?.questionNumber ?? null,
                           name: "",
                           points: 0,
                           description: "",

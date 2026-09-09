@@ -7,3 +7,44 @@
 body {
   font-family: var(--font-sans);
 }
+
+/* ── 인쇄 (A4) ──────────────────────────────────────────────────────
+   화면과 같은 컴포넌트를 그대로 쓰되, 종이에 맞게 여백과 색만 손본다. */
+@page {
+  size: A4;
+  margin: 15mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff;
+    /* 원고지 칸의 옅은 색이 인쇄에서 날아가지 않게 한다. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* 화면에서만 쓰는 것들 */
+  .print\:hidden,
+  .no-print {
+    display: none !important;
+  }
+
+  /* 한 덩어리가 쪽 경계에서 잘리지 않게 */
+  .print-block {
+    break-inside: avoid;
+  }
+
+  .print-page {
+    break-after: page;
+  }
+
+  .print-page:last-child {
+    break-after: auto;
+  }
+
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+}

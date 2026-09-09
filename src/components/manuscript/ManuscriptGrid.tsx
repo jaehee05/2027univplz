@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 
 import type { Cell, LayoutResult } from "@/lib/manuscript/layout";
-import type { RuleIssue } from "@/lib/manuscript/rules";
 import {
   cumulativeThrough,
   lengthRange,
@@ -23,9 +22,32 @@ interface ManuscriptGridProps {
   /** 원문 커서 위치 — 해당 칸을 강조한다 */
   caretOffset?: number | null;
   onCellSelect?: (offset: number) => void;
-  issues?: RuleIssue[];
+  /**
+   * 칸에 색을 입힐 구간. 작성법 경고와 첨삭 코멘트가 같은 모양을 쓴다.
+   * (`lib/manuscript/rules` 의 RuleIssue 와 구조가 같다.)
+   */
+  issues?: Mark[];
+  /** 지금 보고 있는 코멘트 — 테두리로 따로 표시한다 */
+  activeRange?: { start: number; end: number } | null;
   cellSize?: number;
 }
+
+export type MarkTone = "good" | "info" | "warning" | "error";
+
+export interface Mark {
+  severity: MarkTone;
+  start: number;
+  end: number;
+}
+
+const MARK_CLASS: Record<Exclude<MarkTone, "info">, string> = {
+  good: "bg-emerald-100",
+  warning: "bg-amber-100",
+  error: "bg-red-100",
+};
+
+// 겹칠 때 더 센 쪽이 이긴다.
+const MARK_WEIGHT: Record<Exclude<MarkTone, "info">, number> = { good: 1, warning: 2, error: 3 };
 
 interface Slot {
   row: number;
@@ -44,6 +66,7 @@ export function ManuscriptGrid({
   caretOffset,
   onCellSelect,
   issues = [],
+  activeRange = null,
   cellSize = 22,
 }: ManuscriptGridProps) {
   const range = lengthRule ? lengthRange(lengthRule) : null;
@@ -55,18 +78,32 @@ export function ManuscriptGrid({
   }, [layout.cells]);
 
   const flagged = useMemo(() => {
-    const marks = new Map<string, "error" | "warning">();
+    const marks = new Map<string, Exclude<MarkTone, "info">>();
     for (const issue of issues) {
       if (issue.severity === "info" || issue.end <= issue.start) continue;
+      const tone = issue.severity;
       for (const cell of layout.cells) {
         if (cell.start < issue.end && cell.end > issue.start) {
           const key = `${cell.row}:${cell.col}`;
-          if (issue.severity === "error" || !marks.has(key)) marks.set(key, issue.severity);
+          const current = marks.get(key);
+          if (!current || MARK_WEIGHT[tone] > MARK_WEIGHT[current]) marks.set(key, tone);
         }
       }
     }
     return marks;
   }, [issues, layout.cells]);
+
+  /** 지금 보고 있는 코멘트가 덮는 칸 */
+  const active = useMemo(() => {
+    const keys = new Set<string>();
+    if (!activeRange || activeRange.end <= activeRange.start) return keys;
+    for (const cell of layout.cells) {
+      if (cell.start < activeRange.end && cell.end > activeRange.start) {
+        keys.add(`${cell.row}:${cell.col}`);
+      }
+    }
+    return keys;
+  }, [activeRange, layout.cells]);
 
   const caretKey = useMemo(() => {
     if (caretOffset == null) return null;
@@ -144,13 +181,8 @@ export function ManuscriptGrid({
                       "relative flex items-center justify-center border-sky-200 leading-none",
                       isLastCol ? "" : "border-r",
                       row === lastRow ? "" : "border-b",
-                      mark === "error"
-                        ? "bg-red-100"
-                        : mark === "warning"
-                          ? "bg-amber-100"
-                          : overLimit
-                            ? "bg-red-50"
-                            : "bg-transparent",
+                      mark ? MARK_CLASS[mark] : overLimit ? "bg-red-50" : "bg-transparent",
+                      active.has(key) ? "ring-2 ring-inset ring-neutral-900" : "",
                       isCaret ? "ring-2 ring-inset ring-sky-500" : "",
                       onCellSelect ? "cursor-text" : "cursor-default",
                     ].join(" ")}

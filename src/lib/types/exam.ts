@@ -88,6 +88,12 @@ export type AnalysisStatus = "none" | "draft" | "confirmed";
 
 export interface RubricItem {
   id: string;
+  /**
+   * 이 항목이 어느 문항의 것인지 (문제지 표기 그대로).
+   * 문항마다 따로 100점을 매기므로 채점할 때 이 값으로 골라 쓴다.
+   * 옛 데이터에는 없어서 null 일 수 있고, 그때는 전체를 한 묶음으로 본다.
+   */
+  questionNumber: string | null;
   /** 채점 항목 이름 — "논지 파악", "제시문 활용" 등 */
   name: string;
   /** 100점 만점 기준 배점 */
@@ -144,7 +150,45 @@ export interface Analysis {
 
 export const RUBRIC_TOTAL = 100;
 
-/** 배점 합계가 100 인지 확인한다. UI 와 저장 검증에서 함께 쓴다. */
 export function rubricTotal(items: RubricItem[]): number {
   return items.reduce((sum, item) => sum + (Number(item.points) || 0), 0);
+}
+
+/**
+ * 문항별 배점 합계. 문항마다 100점 만점이라 문항별로 따로 센다.
+ * 문항 표시가 없는 옛 데이터는 "" 하나로 묶인다.
+ */
+export function rubricTotalsByQuestion(items: RubricItem[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const item of items) {
+    const key = normalizeQuestionNumber(item.questionNumber);
+    totals.set(key, (totals.get(key) ?? 0) + (Number(item.points) || 0));
+  }
+  return totals;
+}
+
+/**
+ * 문항 번호를 견주기 좋게 다듬는다.
+ * "문제 1", "[문제 1]", "1번", "1" 은 모두 같은 문항이다.
+ */
+export function normalizeQuestionNumber(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.replace(/문제|번|[[\]()\s.]/g, "").trim();
+}
+
+/** 한 문항을 채점할 때 쓸 항목만 고른다. */
+export function rubricFor(items: RubricItem[], questionNumber: string): RubricItem[] {
+  const want = normalizeQuestionNumber(questionNumber);
+  const matched = items.filter(
+    (item) => normalizeQuestionNumber(item.questionNumber) === want,
+  );
+  if (matched.length > 0) return matched;
+
+  // 문항 표시가 없는 옛 기준은 통째로 쓴다.
+  const untagged = items.filter((item) => !item.questionNumber);
+  if (untagged.length > 0) return untagged;
+
+  // 번호가 안 맞으면(문항이 하나뿐인 시험 등) 묶음이 하나일 때만 그대로 쓴다.
+  const groups = new Set(items.map((item) => normalizeQuestionNumber(item.questionNumber)));
+  return groups.size === 1 ? items : [];
 }

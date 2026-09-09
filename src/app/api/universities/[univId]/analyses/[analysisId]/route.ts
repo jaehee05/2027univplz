@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { apiTeacher } from "@/lib/auth/dal";
 import { analysisRef, examRef, toAnalysis } from "@/lib/exam/store";
-import { RUBRIC_TOTAL, rubricTotal } from "@/lib/types/exam";
+import { RUBRIC_TOTAL, rubricTotalsByQuestion } from "@/lib/types/exam";
 
 type Ctx = RouteContext<"/api/universities/[univId]/analyses/[analysisId]">;
 
@@ -21,6 +21,7 @@ export async function GET(_request: Request, ctx: Ctx) {
 
 const rubricItemSchema = z.object({
   id: z.string(),
+  questionNumber: z.string().trim().max(20).nullable(),
   name: z.string().trim().min(1).max(60),
   points: z.number().min(0).max(100),
   description: z.string().max(2000),
@@ -88,12 +89,17 @@ export async function PATCH(request: Request, ctx: Ctx) {
   const current = toAnalysis(snap, univId);
   const nextItems = parsed.data.rubric?.items ?? current.rubric.items;
 
-  // 확정하려면 배점 합계가 100 이어야 한다.
+  // 학생은 문항 하나씩 답안을 쓰므로, 확정하려면 문항마다 배점이 100 이어야 한다.
   if (parsed.data.status === "confirmed") {
-    const total = rubricTotal(nextItems);
-    if (total !== RUBRIC_TOTAL) {
+    const wrong = [...rubricTotalsByQuestion(nextItems)].filter(
+      ([, total]) => total !== RUBRIC_TOTAL,
+    );
+    if (wrong.length > 0) {
+      const detail = wrong
+        .map(([number, total]) => `${number ? `${number}번` : "전체"} ${total}점`)
+        .join(", ");
       return Response.json(
-        { error: `배점 합계가 ${total}점입니다. ${RUBRIC_TOTAL}점에 맞춘 뒤 확정하세요.` },
+        { error: `문항마다 배점이 ${RUBRIC_TOTAL}점이어야 합니다. 지금은 ${detail} 입니다.` },
         { status: 400 },
       );
     }

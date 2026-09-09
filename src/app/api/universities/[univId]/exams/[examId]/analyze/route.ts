@@ -5,6 +5,7 @@ import { analyzeRubric } from "@/lib/anthropic/exam-analysis";
 import {
   analysisRef,
   examRef,
+  listQuestions,
   readExtractedText,
   toAnalysis,
   toExam,
@@ -34,9 +35,10 @@ export async function POST(_request: Request, ctx: Ctx) {
   const university = toUniversity(univSnap);
   const exam = toExam(examSnap, univId);
 
-  const [examText, solutionText] = await Promise.all([
+  const [examText, solutionText, saved] = await Promise.all([
     readExtractedText(univId, examId, "question"),
     readExtractedText(univId, examId, "solution"),
+    listQuestions(univId, examId),
   ]);
 
   if (examText.trim().length < 100) {
@@ -63,6 +65,7 @@ export async function POST(_request: Request, ctx: Ctx) {
       year: exam.year,
       examText,
       solutionText,
+      questionNumbers: saved.map((question) => question.number),
     });
 
     await ref.set({

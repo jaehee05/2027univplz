@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { apiTeacher } from "@/lib/auth/dal";
 import { adminBucket } from "@/lib/firebase/admin";
-import { examRef, listExams, listQuestions, toExam } from "@/lib/exam/store";
+import { analysisRef, examRef, listExams, listQuestions, toExam } from "@/lib/exam/store";
 
 type Ctx = RouteContext<"/api/universities/[univId]/exams/[examId]">;
 
@@ -138,6 +138,8 @@ export async function DELETE(_request: Request, ctx: Ctx) {
   }
   // 하위 컬렉션(questions · extractions)까지 함께 지운다.
   await ref.firestore.recursiveDelete(ref);
+  // 채점 기준은 대학 아래 따로 있어서 위 삭제에 안 걸린다.
+  await analysisRef(univId, examId).delete().catch(() => undefined);
 
   return Response.json({ exams: await listExams(univId) });
 }

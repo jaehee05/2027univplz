@@ -70,12 +70,16 @@ universities/{univId}    name, slug, order, active, manuscriptSpec
     extractions/{kind}   text    # 추출 원문. exam 문서 1MB 제한을 피해 따로 둔다
   analyses/{analysisId}  scope('exam'|'aggregate'), questionTypes[], rubric{items[],deductions[]},
                          answerStyle{}, modelAnswerPatterns[], status('draft'|'confirmed'), version
+                         # rubric.items[].questionNumber — 채점은 문항 단위이고 문항마다 100점이다
 
-assignments/{id}         studentId, univId, examId, questionId, assignedBy, dueAt, status
+assignments/{id}         studentId, studentName, univId/univName, examId/examTitle,
+                         questionId/questionNumber/questionPrompt, charTarget, tolerance,
+                         assignedBy, dueAt, status, answerId, correctionId
+                         # 문항 조건을 복사해 둔다 — 기출을 나중에 고쳐도 낸 과제는 그대로여야 한다
 answers/{id}             studentId, assignmentId, text, charCount, status('draft'|'submitted')
   versions/{vid}         text, charCount, savedAt, reason   # 불변
-corrections/{id}         answerId, studentId, status, scores{}, inlineComments[], overall{},
-                         revisedExample, teacherEdits?, published, usage{}
+corrections/{id}         answerId, assignmentId, studentId, status, scores{items,deductions,total},
+                         inlineComments[], overall{}, revisedExample, teacherEdited, published, usage{}
 ```
 
 인라인 코멘트 위치는 **원문 문자 오프셋**으로 저장한다. 원고지 칸 좌표는 렌더 시 계산하므로
@@ -150,9 +154,9 @@ PATCH  /api/corrections/[id]             점수·코멘트 수정 · 공개 (tea
 1. **프로젝트 셋업 + Firebase Auth·역할·보안 규칙** ← 완료
 2. 원고지 컴포넌트 + 작성법 검사 ← 완료
 3. PDF 업로드·파싱 + 대학별 채점 기준 분석 ← 완료
-4. 첨삭 API + 결과 화면
-5. 인쇄
-6. 관리 화면 다듬기
+4. 첨삭 API + 결과 화면 ← 완료
+5. 인쇄 ← 완료
+6. 관리 화면 다듬기 ← 완료
 
 기출 PDF가 아직 없으므로 3단계는 더미 기출로 파이프라인을 검증하고, 실제 PDF는 그대로 투입한다.
 
@@ -161,4 +165,10 @@ PATCH  /api/corrections/[id]             점수·코멘트 수정 · 공개 (tea
 | 명령 | 내용 |
 |---|---|
 | `npm run check:manuscript` | 원고지 배치·작성법 규칙 단위 검증 (외부 호출 없음) |
-| `npm run smoke:stage3` | dev 서버를 켠 채 추출 → 문항 파싱 → 채점 기준 분석 → 확정까지 실제로 통과시켜 본다. Claude API 를 실제로 호출한다. |
+| `npm run check:zip` | zip 에서 PDF 만 골라내는지 (외부 호출 없음) |
+| `npm run smoke:stage3` | dev 서버를 켠 채 추출 → 문항 파싱 → 채점 기준 분석 → 확정까지 |
+| `npm run smoke:intake` | 인문·자연, 문제·해설이 섞인 PDF 를 제대로 나눠 기출로 묶는지 |
+| `npm run smoke:full` | **전 과정** — 기출 등록 → 기준 확정 → 학생 가입 → 배정 → 작성·제출 → 첨삭 → 공개 → 학생 확인 → 인쇄 4종 |
+| `npm run time:pages` | 로그인한 상태에서 관리 화면 응답 시간 측정 |
+
+smoke 계열은 Claude API 를 실제로 호출하고, 만든 데이터는 끝나고 지운다.

@@ -104,8 +104,9 @@ export function slugifyNumber(number: string, index: number): string {
 /* ── 채점 기준 분석 ──────────────────────────────────────── */
 
 const rubricItemSchema = z.object({
+  questionNumber: z.string().describe("이 항목이 어느 문항의 것인지. 문제지 표기 그대로"),
   name: z.string(),
-  points: z.number().describe("100점 만점 기준 배점"),
+  points: z.number().describe("그 문항 100점 만점 기준 배점"),
   description: z.string(),
   criteria: z.array(z.string()).describe("만점 조건 2~4개"),
   inferred: z.boolean().describe("해설에 없어 모범답안에서 추론했으면 true"),
@@ -127,7 +128,7 @@ const analysisSchema = z.object({
     }),
   ),
   rubric: z.object({
-    items: z.array(rubricItemSchema).describe("배점 합계가 정확히 100"),
+    items: z.array(rubricItemSchema).describe("문항마다 배점 합계가 정확히 100"),
     deductions: z.array(deductionSchema),
   }),
   answerStyle: z.object({
@@ -148,6 +149,8 @@ export async function analyzeRubric(input: {
   year: number;
   examText: string;
   solutionText: string;
+  /** 이미 저장해 둔 문항 번호. 있으면 이 번호를 그대로 쓰게 한다. */
+  questionNumbers: string[];
 }): Promise<{ analysis: AnalysisPayload; usage: CallUsage }> {
   const template = await loadPrompt("analyze-rubric");
   const prompt = fillPrompt(template, {
@@ -155,6 +158,9 @@ export async function analyzeRubric(input: {
     year: String(input.year),
     examText: clip(input.examText),
     solutionText: input.solutionText ? clip(input.solutionText) : "(해설 PDF 가 아직 없습니다.)",
+    questionNumbers: input.questionNumbers.length
+      ? input.questionNumbers.map((n) => `${n}번`).join(", ")
+      : "(아직 문항을 저장하지 않았습니다. 문제지에서 읽어 낸 번호를 쓰세요.)",
   });
 
   const model = serverEnv.correctionModel;
