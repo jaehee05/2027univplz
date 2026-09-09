@@ -7,6 +7,8 @@ import type { University } from "@/lib/types/exam";
 
 export function UniversityManager({ initial }: { initial: University[] }) {
   const [list, setList] = useState<University[]>(initial);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,6 +46,16 @@ export function UniversityManager({ initial }: { initial: University[] }) {
     }
   }
 
+  async function rename(univId: string) {
+    if (!editName.trim()) {
+      setError("대학 이름을 넣어 주세요.");
+      return;
+    }
+    if (await send({ name: editName.trim() }, `/api/universities/${univId}`, "PATCH")) {
+      setEditing(null);
+    }
+  }
+
   async function remove(univ: University) {
     if (!confirm(`${univ.name} 를 삭제할까요? 등록된 기출이 있으면 삭제되지 않습니다.`)) return;
     await send({}, `/api/universities/${univ.id}`, "DELETE");
@@ -68,41 +80,86 @@ export function UniversityManager({ initial }: { initial: University[] }) {
       {list.length > 0 ? (
         <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200">
           {list.map((univ) => (
-            <li key={univ.id} className="flex items-center justify-between px-4 py-3">
-              <div>
-                <Link
-                  href={`/admin/universities/${univ.id}`}
-                  className="font-medium underline-offset-4 hover:underline"
-                >
-                  {univ.name}
-                </Link>
-                <span className="ml-2 text-xs text-neutral-400">{univ.slug}</span>
-                {!univ.active ? (
-                  <span className="ml-2 rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">
-                    비활성
+            <li key={univ.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+              {editing === univ.id ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    value={editName}
+                    onChange={(event) => setEditName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void rename(univ.id);
+                      if (event.key === "Escape") setEditing(null);
+                    }}
+                    autoFocus
+                    className="w-40 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-xs text-neutral-400">
+                    약칭 {univ.slug} 은 주소에 쓰여서 바꿀 수 없습니다
                   </span>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <button
-                  type="button"
-                  onClick={() =>
-                    void send({ active: !univ.active }, `/api/universities/${univ.id}`, "PATCH")
-                  }
-                  disabled={busy}
-                  className="rounded-md border border-neutral-300 px-3 py-1.5 disabled:opacity-50"
-                >
-                  {univ.active ? "비활성화" : "활성화"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void remove(univ)}
-                  disabled={busy}
-                  className="rounded-md border border-red-200 px-3 py-1.5 text-red-600 disabled:opacity-50"
-                >
-                  삭제
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => void rename(univ.id)}
+                    disabled={busy}
+                    className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                  >
+                    저장
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(null)}
+                    className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+                  >
+                    취소
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <Link
+                      href={`/admin/universities/${univ.id}`}
+                      className="font-medium underline-offset-4 hover:underline"
+                    >
+                      {univ.name}
+                    </Link>
+                    <span className="ml-2 text-xs text-neutral-400">{univ.slug}</span>
+                    {!univ.active ? (
+                      <span className="ml-2 rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">
+                        비활성
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditing(univ.id);
+                        setEditName(univ.name);
+                      }}
+                      className="rounded-md border border-neutral-300 px-3 py-1.5"
+                    >
+                      이름 수정
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void send({ active: !univ.active }, `/api/universities/${univ.id}`, "PATCH")
+                      }
+                      disabled={busy}
+                      className="rounded-md border border-neutral-300 px-3 py-1.5 disabled:opacity-50"
+                    >
+                      {univ.active ? "비활성화" : "활성화"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void remove(univ)}
+                      disabled={busy}
+                      className="rounded-md border border-red-200 px-3 py-1.5 text-red-600 disabled:opacity-50"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </>
+              )}
             </li>
           ))}
         </ul>

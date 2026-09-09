@@ -42,6 +42,8 @@ function toPdfFile(raw: DocumentData | undefined): PdfFile | null {
     storagePath: raw.storagePath,
     fileName: raw.fileName,
     size: raw.size ?? 0,
+    pageFrom: raw.pageFrom ?? null,
+    pageTo: raw.pageTo ?? null,
     uploadedAt: toIso(raw.uploadedAt),
     extraction: raw.extraction
       ? ({

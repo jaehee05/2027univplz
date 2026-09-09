@@ -23,6 +23,8 @@ function formatSize(bytes: number): string {
 }
 
 export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
+  const [range, setRange] = useState({ from: "", to: "" });
+  const [editingRange, setEditingRange] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +80,29 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
       );
     } finally {
       setProgress(null);
+    }
+  }
+
+  async function saveRange() {
+    setError(null);
+    const from = range.from.trim() ? Number(range.from) : null;
+    const to = range.to.trim() ? Number(range.to) : null;
+    if ((from !== null && !Number.isInteger(from)) || (to !== null && !Number.isInteger(to))) {
+      setError("쪽 번호는 숫자로 넣어 주세요. 전체를 쓰려면 비워 두세요.");
+      return;
+    }
+    try {
+      const response = await fetch(base, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ range: { kind, pageFrom: from, pageTo: to } }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "쪽 범위를 저장하지 못했습니다.");
+      onExam(data.exam);
+      setEditingRange(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "쪽 범위를 저장하지 못했습니다.");
     }
   }
 
@@ -145,6 +170,64 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
           <span className="text-sm text-neutral-500">올리는 중 {progress}%</span>
         ) : null}
       </div>
+
+      {pdf ? (
+        <div className="mt-3 text-sm">
+          {editingRange ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-neutral-500">쓰는 쪽</span>
+              <input
+                value={range.from}
+                onChange={(event) => setRange({ ...range, from: event.target.value })}
+                placeholder="처음"
+                className="w-16 rounded border border-neutral-300 px-2 py-1 text-center text-sm"
+              />
+              <span>~</span>
+              <input
+                value={range.to}
+                onChange={(event) => setRange({ ...range, to: event.target.value })}
+                placeholder="끝"
+                className="w-16 rounded border border-neutral-300 px-2 py-1 text-center text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => void saveRange()}
+                className="rounded-md bg-neutral-900 px-3 py-1 text-xs text-white"
+              >
+                저장
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingRange(false)}
+                className="rounded-md border border-neutral-300 px-3 py-1 text-xs"
+              >
+                취소
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-neutral-500">
+                {pdf.pageFrom || pdf.pageTo
+                  ? `${pdf.pageFrom ?? "처음"}~${pdf.pageTo ?? "끝"}쪽만 사용`
+                  : "파일 전체 사용"}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setRange({
+                    from: pdf.pageFrom ? String(pdf.pageFrom) : "",
+                    to: pdf.pageTo ? String(pdf.pageTo) : "",
+                  });
+                  setEditingRange(true);
+                }}
+                className="rounded border border-neutral-300 px-2 py-0.5 text-xs"
+              >
+                범위 바꾸기
+              </button>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {extraction ? (
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">

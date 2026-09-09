@@ -19,6 +19,12 @@ export interface PdfFile {
   storagePath: string;
   fileName: string;
   size: number;
+  /**
+   * 한 PDF 에 인문·자연이나 문제·해설이 같이 있을 때 쓰는 쪽 범위 (1부터, 양끝 포함).
+   * null 이면 전체를 쓴다.
+   */
+  pageFrom: number | null;
+  pageTo: number | null;
   uploadedAt: string | null;
   extraction: Extraction | null;
 }

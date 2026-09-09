@@ -1,8 +1,9 @@
 import "server-only";
 
 import { anthropic } from "@/lib/anthropic/client";
+import { adminBucket } from "@/lib/firebase/admin";
 import { serverEnv } from "@/lib/env";
-import type { Extraction } from "@/lib/types/exam";
+import type { ExtractionMethod } from "@/lib/types/exam";
 
 /** 이 값보다 페이지당 글자가 적으면 스캔본으로 보고 Claude 에 넘긴다. */
 const CHARS_PER_PAGE_THRESHOLD = 60;
@@ -11,22 +12,21 @@ const CHARS_PER_PAGE_THRESHOLD = 60;
 const CLAUDE_MAX_PAGES = 100;
 const CLAUDE_MAX_BYTES = 30 * 1024 * 1024;
 
-interface PdfjsResult {
-  text: string;
-  pages: number;
+export interface PdfDocument {
+  method: ExtractionMethod;
+  /** 쪽별 글자. 1쪽이 index 0. */
+  pageTexts: string[];
+  /** 어느 길로 갔는지, 왜 그랬는지 */
+  note: string;
 }
 
-/**
- * pdfjs 로 텍스트 레이어를 읽는다. 스캔본이면 거의 빈 문자열이 나온다.
- * Node 에서는 워커 없이 동작하도록 legacy 빌드를 쓴다.
- */
-async function extractWithPdfjs(data: Uint8Array): Promise<PdfjsResult> {
+/** pdfjs 로 텍스트 레이어를 쪽별로 읽는다. 스캔본이면 거의 빈 문자열이 나온다. */
+async function readWithPdfjs(data: Uint8Array): Promise<string[]> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-
   // 글자만 뽑으므로 폰트는 아예 만들지 않는다.
   const doc = await pdfjs.getDocument({ data, disableFontFace: true }).promise;
 
-  const parts: string[] = [];
+  const pages: string[] = [];
   for (let pageNo = 1; pageNo <= doc.numPages; pageNo += 1) {
     const page = await doc.getPage(pageNo);
     const content = await page.getTextContent();
@@ -43,18 +43,18 @@ async function extractWithPdfjs(data: Uint8Array): Promise<PdfjsResult> {
     }
     if (line) lines.push(line);
 
-    parts.push(lines.join("\n").trim());
+    pages.push(lines.join("\n").trim());
     page.cleanup();
   }
 
-  const pages = doc.numPages;
   await doc.destroy();
-
-  return { text: parts.join("\n\n").trim(), pages };
+  return pages;
 }
 
-/** 스캔본을 Claude 에 그림째 넘겨 글자로 옮긴다. */
-async function extractWithClaude(data: Uint8Array, hint: string): Promise<string> {
+/** 쪽 경계 표시를 넣어 옮겨 적게 하고, 그 표시로 다시 쪼갠다. */
+const PAGE_MARK = /\[\[\s*(?:page|쪽)\s*\d+\s*\]\]/gi;
+
+async function readWithClaude(data: Uint8Array, hint: string): Promise<string[]> {
   if (data.byteLength > CLAUDE_MAX_BYTES) {
     throw new Error(
       `PDF 가 ${Math.round(data.byteLength / 1024 / 1024)}MB 로 너무 큽니다. 30MB 이하로 나눠 올려 주세요.`,
@@ -70,7 +70,8 @@ async function extractWithClaude(data: Uint8Array, hint: string): Promise<string
       "너는 한국 대학 논술 시험지를 글자로 옮기는 사람이다. " +
       "보이는 내용을 빠짐없이, 원래 순서와 줄바꿈을 지켜 그대로 옮겨 적어라. " +
       "요약하거나 해설을 덧붙이지 말고, 표는 줄글로 풀어서 적는다. " +
-      "제시문 기호(가·나·다, [가], (A) 등)와 문항 번호는 반드시 그대로 남긴다.",
+      "제시문 기호(가·나·다, [가], (A) 등)와 문항 번호는 반드시 그대로 남긴다. " +
+      "각 쪽이 시작될 때마다 그 줄에 [[page 1]], [[page 2]] 처럼 쪽 번호만 적은 줄을 넣어라.",
     messages: [
       {
         role: "user",
@@ -80,70 +81,115 @@ async function extractWithClaude(data: Uint8Array, hint: string): Promise<string
             source: { type: "base64", media_type: "application/pdf", data: base64 },
             title: hint,
           },
-          { type: "text", text: "이 PDF 의 모든 글자를 그대로 옮겨 적어 줘." },
+          { type: "text", text: "이 PDF 의 모든 글자를 쪽 표시와 함께 그대로 옮겨 적어 줘." },
         ],
       },
     ],
   });
 
   const message = await stream.finalMessage();
-  return message.content
+  const text = message.content
     .filter((block) => block.type === "text")
     .map((block) => block.text)
-    .join("")
-    .trim();
+    .join("");
+
+  const parts = text.split(PAGE_MARK).map((part) => part.trim());
+  // 첫 조각은 [[page 1]] 앞의 빈 부분이라 비어 있으면 버린다.
+  if (parts.length > 1 && !parts[0]) parts.shift();
+  return parts.length ? parts : [text.trim()];
 }
 
 /**
- * PDF 한 개를 텍스트로 만든다. 텍스트 레이어가 있으면 그대로 쓰고,
- * 거의 없으면 Claude 로 넘긴 뒤 어느 길로 갔는지 함께 돌려준다.
+ * PDF 를 쪽별 텍스트로 만든다.
+ * 텍스트 레이어가 있으면 그대로 쓰고, 거의 없으면 Claude 로 넘긴다.
  */
-export async function extractPdfText(
-  data: Uint8Array,
-  label: string,
-): Promise<Omit<Extraction, "extractedAt">> {
-  let pages = 0;
-  let pdfjsText = "";
+export async function extractPdfDocument(data: Uint8Array, label: string): Promise<PdfDocument> {
+  let pageTexts: string[] = [];
   let pdfjsError: string | null = null;
 
   try {
-    const result = await extractWithPdfjs(data);
-    pages = result.pages;
-    pdfjsText = result.text;
+    pageTexts = await readWithPdfjs(data);
   } catch (error) {
     pdfjsError = error instanceof Error ? error.message : String(error);
   }
 
-  const perPage = pages > 0 ? pdfjsText.length / pages : 0;
-  const looksLikeScan = pdfjsText.length === 0 || perPage < CHARS_PER_PAGE_THRESHOLD;
+  const chars = pageTexts.join("").length;
+  const perPage = pageTexts.length > 0 ? chars / pageTexts.length : 0;
+  const looksLikeScan = chars === 0 || perPage < CHARS_PER_PAGE_THRESHOLD;
 
   if (!looksLikeScan) {
     return {
       method: "pdfjs",
-      pages,
-      chars: pdfjsText.length,
-      text: pdfjsText,
-      note: `텍스트 레이어에서 바로 읽었습니다 (페이지당 약 ${Math.round(perPage)}자).`,
+      pageTexts,
+      note: `텍스트 레이어에서 바로 읽었습니다 (쪽당 약 ${Math.round(perPage)}자).`,
     };
   }
 
-  if (pages > CLAUDE_MAX_PAGES) {
+  if (pageTexts.length > CLAUDE_MAX_PAGES) {
     throw new Error(
-      `스캔본이고 ${pages}쪽이라 한 번에 처리할 수 없습니다. ${CLAUDE_MAX_PAGES}쪽 이하로 나눠 올려 주세요.`,
+      `스캔본이고 ${pageTexts.length}쪽이라 한 번에 처리할 수 없습니다. ${CLAUDE_MAX_PAGES}쪽 이하로 나눠 올려 주세요.`,
     );
   }
 
   const reason = pdfjsError
     ? `pdfjs 읽기 실패(${pdfjsError})`
-    : `텍스트 레이어가 페이지당 ${Math.round(perPage)}자뿐`;
-
-  const text = await extractWithClaude(data, label);
+    : `텍스트 레이어가 쪽당 ${Math.round(perPage)}자뿐`;
 
   return {
     method: "claude",
-    pages,
-    chars: text.length,
-    text,
+    pageTexts: await readWithClaude(data, label),
     note: `${reason} — 스캔본으로 보고 ${serverEnv.extractionModel} 로 글자를 옮겼습니다.`,
   };
+}
+
+/**
+ * 같은 PDF 를 여러 번(분류할 때 · 문제로 붙일 때 · 해설로 붙일 때) 읽게 되므로
+ * 추출 결과를 Storage 에 캐시해 둔다. 스캔본은 Claude 를 다시 부르면 돈이 든다.
+ */
+function cachePath(storagePath: string): string {
+  return `${storagePath}.pages.json`;
+}
+
+export async function extractPdfCached(storagePath: string, label: string): Promise<PdfDocument> {
+  const bucket = adminBucket();
+  const cache = bucket.file(cachePath(storagePath));
+
+  const [hit] = await cache.exists();
+  if (hit) {
+    try {
+      const [buffer] = await cache.download();
+      return JSON.parse(buffer.toString("utf8")) as PdfDocument;
+    } catch {
+      // 캐시가 깨졌으면 무시하고 다시 뽑는다.
+    }
+  }
+
+  const [buffer] = await bucket.file(storagePath).download();
+  const result = await extractPdfDocument(new Uint8Array(buffer), label);
+
+  await cache
+    .save(JSON.stringify(result), { contentType: "application/json" })
+    .catch(() => undefined);
+
+  return result;
+}
+
+/** 쪽 범위(1부터, 양끝 포함)를 잘라 하나의 글로 만든다. */
+export function joinPages(pageTexts: string[], from?: number | null, to?: number | null): string {
+  const start = Math.max(1, from ?? 1) - 1;
+  const end = Math.min(pageTexts.length, to ?? pageTexts.length);
+  return pageTexts.slice(start, end).join("\n\n").trim();
+}
+
+/**
+ * 분류용 요약 — 쪽마다 앞부분만 남긴다.
+ * 전문을 다 넣으면 비싸고, 어디서 인문/자연 · 문제/해설이 갈리는지 판단하는 데는 앞부분이면 충분하다.
+ */
+export function pageDigest(pageTexts: string[], perPage = 350): string {
+  return pageTexts
+    .map((text, index) => {
+      const head = text.replace(/\s+/g, " ").trim().slice(0, perPage);
+      return `[${index + 1}쪽 · ${text.length}자] ${head || "(글자 없음)"}`;
+    })
+    .join("\n");
 }

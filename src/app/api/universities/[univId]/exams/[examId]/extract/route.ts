@@ -2,9 +2,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 
 import { apiTeacher } from "@/lib/auth/dal";
-import { adminBucket } from "@/lib/firebase/admin";
 import { examRef, extractionRef, toExam } from "@/lib/exam/store";
-import { extractPdfText } from "@/lib/pdf/extract";
+import { extractPdfCached, joinPages } from "@/lib/pdf/extract";
 
 type Ctx = RouteContext<"/api/universities/[univId]/exams/[examId]/extract">;
 
@@ -34,21 +33,42 @@ export async function POST(request: Request, ctx: Ctx) {
   const pdf = kind === "question" ? exam.questionPdf : exam.solutionPdf;
   if (!pdf) {
     return Response.json(
-      { error: kind === "question" ? "문제 PDF 를 먼저 올려 주세요." : "해설 PDF 를 먼저 올려 주세요." },
+      {
+        error:
+          kind === "question" ? "문제 PDF 를 먼저 올려 주세요." : "해설 PDF 를 먼저 올려 주세요.",
+      },
       { status: 400 },
     );
   }
 
-  let extraction;
+  let document;
   try {
-    const [buffer] = await adminBucket().file(pdf.storagePath).download();
-    extraction = await extractPdfText(new Uint8Array(buffer), `${exam.year} ${exam.title}`);
+    document = await extractPdfCached(pdf.storagePath, `${exam.year} ${exam.title}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "PDF 를 읽지 못했습니다.";
     return Response.json({ error: message }, { status: 502 });
   }
 
-  const { text, ...meta } = extraction;
+  // 한 PDF 안에서 이 자료가 차지하는 쪽만 잘라 쓴다.
+  const text = joinPages(document.pageTexts, pdf.pageFrom, pdf.pageTo);
+  const usedPages =
+    pdf.pageFrom || pdf.pageTo
+      ? Math.min(document.pageTexts.length, pdf.pageTo ?? document.pageTexts.length) -
+        Math.max(1, pdf.pageFrom ?? 1) +
+        1
+      : document.pageTexts.length;
+
+  const rangeNote =
+    pdf.pageFrom || pdf.pageTo
+      ? ` 전체 ${document.pageTexts.length}쪽 중 ${pdf.pageFrom ?? 1}~${pdf.pageTo ?? document.pageTexts.length}쪽만 썼습니다.`
+      : "";
+
+  const meta = {
+    method: document.method,
+    pages: usedPages,
+    chars: text.length,
+    note: `${document.note}${rangeNote}`,
+  };
 
   await extractionRef(univId, examId, kind).set({
     text,

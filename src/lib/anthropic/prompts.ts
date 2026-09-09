@@ -10,12 +10,15 @@ import path from "node:path";
 const cache = new Map<string, string>();
 
 export async function loadPrompt(name: string): Promise<string> {
-  const hit = cache.get(name);
+  // 개발 중에는 파일을 고치면 바로 반영되어야 한다. 서버 재시작을 기다리지 않는다.
+  const useCache = process.env.NODE_ENV === "production";
+
+  const hit = useCache ? cache.get(name) : undefined;
   if (hit) return hit;
 
   const file = path.join(process.cwd(), "prompts", `${name}.md`);
   const text = await readFile(file, "utf8");
-  cache.set(name, text);
+  if (useCache) cache.set(name, text);
   return text;
 }
 

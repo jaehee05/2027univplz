@@ -9,10 +9,13 @@
     "lint": "eslint",
     "check:manuscript": "tsx scripts/check-layout.ts",
     "smoke:stage3": "tsx scripts/smoke-stage3.ts",
-    "time:pages": "tsx scripts/time-pages.ts"
+    "time:pages": "tsx scripts/time-pages.ts",
+    "smoke:intake": "tsx scripts/smoke-intake.ts",
+    "check:zip": "tsx scripts/check-zip.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
+    "fflate": "^0.8.3",
     "firebase": "^12.18.0",
     "firebase-admin": "^14.3.0",
     "next": "16.3.4",
