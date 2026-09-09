@@ -11,10 +11,8 @@
 
 type Global = Record<string, unknown>;
 
-class Stub {
-  // 하위 클래스로 쓰이거나 new 로 만들어져도 터지지 않을 만큼만 있으면 된다.
-  constructor(..._args: unknown[]) {}
-}
+// 하위 클래스로 쓰이거나 new 로 만들어져도 터지지 않을 만큼만 있으면 된다.
+class Stub {}
 
 /** DOMMatrix 는 곱셈 결과를 읽는 코드가 있어 항등행렬 값을 갖고 있게 한다. */
 class DOMMatrixStub extends Stub {

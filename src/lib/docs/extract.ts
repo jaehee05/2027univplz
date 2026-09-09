@@ -121,7 +121,36 @@ async function readWithClaude(data: Uint8Array, hint: string): Promise<string[]>
  * PDF 를 쪽별 텍스트로 만든다.
  * 텍스트 레이어가 있으면 그대로 쓰고, 거의 없으면 Claude 로 넘긴다.
  */
+/**
+ * PDF 에서 글자를 뽑는다.
+ *
+ * CLOVA OCR 이 설정돼 있으면 먼저 쓴다. 텍스트 PDF 든 스캔본이든 한 번에 처리하고
+ * 한국어 정확도가 좋다. 서버리스에서 pdfjs 가 깨지는 일이 잦아 그쪽에 기대지 않는다.
+ * CLOVA 가 없거나 실패하면 pdfjs → (글자가 거의 없으면) Claude 순으로 내려간다.
+ */
 async function extractPdf(data: Uint8Array, label: string): Promise<ExtractedDocument> {
+  let clovaError: string | null = null;
+
+  if (isClovaConfigured()) {
+    try {
+      const pages = await ocrWithClova(data, label);
+      const total = pages.join("").length;
+      if (total > 0) {
+        const blank = pages.filter((page) => page.length === 0).length;
+        return {
+          method: "clova",
+          pageTexts: pages,
+          note:
+            `CLOVA OCR 로 읽었습니다 (${pages.length}쪽 · ${total}자` +
+            `${blank > 0 ? ` · 글자 없는 쪽 ${blank}개` : ""}).`,
+        };
+      }
+      clovaError = "글자를 한 자도 찾지 못했습니다";
+    } catch (error) {
+      clovaError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
   let pageTexts: string[] = [];
   let pdfjsError: string | null = null;
 
@@ -135,11 +164,13 @@ async function extractPdf(data: Uint8Array, label: string): Promise<ExtractedDoc
   const perPage = pageTexts.length > 0 ? chars / pageTexts.length : 0;
   const looksLikeScan = chars === 0 || perPage < CHARS_PER_PAGE_THRESHOLD;
 
+  const clovaNote = clovaError ? `CLOVA OCR 실패(${clovaError}) — ` : "";
+
   if (!looksLikeScan) {
     return {
       method: "pdfjs",
       pageTexts,
-      note: `텍스트 레이어에서 바로 읽었습니다 (쪽당 약 ${Math.round(perPage)}자).`,
+      note: `${clovaNote}텍스트 레이어에서 바로 읽었습니다 (쪽당 약 ${Math.round(perPage)}자).`,
     };
   }
 
@@ -153,36 +184,10 @@ async function extractPdf(data: Uint8Array, label: string): Promise<ExtractedDoc
     ? `pdfjs 읽기 실패(${pdfjsError})`
     : `텍스트 레이어가 쪽당 ${Math.round(perPage)}자뿐`;
 
-  // 한국어 스캔본은 CLOVA OCR 이 더 정확하고 빠르다. 설정돼 있으면 먼저 쓴다.
-  if (isClovaConfigured()) {
-    try {
-      const pages = await ocrWithClova(data, label, pageTexts.length || undefined);
-      const total = pages.join("").length;
-      if (total > 0) {
-        const blank = pages.filter((page) => page.length === 0).length;
-        return {
-          method: "clova",
-          pageTexts: pages,
-          note:
-            `${reason} — 스캔본으로 보고 CLOVA OCR 로 읽었습니다 (${pages.length}쪽 · ${total}자` +
-            `${blank > 0 ? ` · 글자 없는 쪽 ${blank}개` : ""}).`,
-        };
-      }
-    } catch (error) {
-      // OCR 이 막히면 Claude 로 넘어간다. 이유는 남긴다.
-      const detail = error instanceof Error ? error.message : String(error);
-      return {
-        method: "claude",
-        pageTexts: await readWithClaude(data, label),
-        note: `${reason} — CLOVA OCR 실패(${detail})로 ${serverEnv.extractionModel} 로 옮겼습니다.`,
-      };
-    }
-  }
-
   return {
     method: "claude",
     pageTexts: await readWithClaude(data, label),
-    note: `${reason} — 스캔본으로 보고 ${serverEnv.extractionModel} 로 글자를 옮겼습니다.`,
+    note: `${clovaNote}${reason} — ${serverEnv.extractionModel} 로 글자를 옮겼습니다.`,
   };
 }
 
