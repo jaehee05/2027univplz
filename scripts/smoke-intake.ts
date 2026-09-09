@@ -109,6 +109,7 @@ async function main() {
         });
       }
     }
+    console.log(`   추출: ${data.extraction.note}`);
     if (data.note) console.log(`   메모: ${data.note}`);
   }
 

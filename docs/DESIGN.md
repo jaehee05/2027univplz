@@ -15,7 +15,11 @@ Claude API로 첨삭하는 서비스. 문제지·답안지·첨삭 결과는 모
 | DB | Firestore |
 | 파일 | Firebase Storage (기출·해설 PDF) |
 | LLM | Claude API — 첨삭·분석 `claude-opus-5`, 파일 분류·텍스트화 `claude-haiku-4-5` (환경변수 교체 가능) |
-| OCR | 한국어 스캔본은 네이버 CLOVA OCR (설정돼 있을 때). 없으면 Claude 로 대신 읽는다 |
+| OCR | 한국어 스캔본은 네이버 CLOVA OCR (설정돼 있을 때). 없거나 실패하면 Claude 로 대신 읽는다 |
+
+> CLOVA 는 **API Gateway 연동 후의 공개 Invoke URL**(`https://<id>.apigw.ntruss.com/custom/v1/...`)이
+> 필요하다. `clovaocr-api-kr.ncloud.com` 주소는 사설 IP(10.x)로 풀리는 NCP 내부 전용이라
+> 바깥에서 닿지 않는다. 내부 전용 주소는 부르기 전에 걸러 내고 사유를 관리 화면에 남긴다.
 
 - Claude 호출은 Route Handler(서버)에서만. `ANTHROPIC_API_KEY`는 클라이언트에 노출하지 않는다.
 - 서비스 계정은 `FIREBASE_SERVICE_ACCOUNT_KEY`(JSON 한 줄 문자열) 환경변수. 코드·문서에 값이 들어가지 않는다.
@@ -169,6 +173,8 @@ PATCH  /api/corrections/[id]             점수·코멘트 수정 · 공개 (tea
 | `npm run check:manuscript` | 원고지 배치·작성법 규칙 단위 검증 (외부 호출 없음) |
 | `npm run check:zip` | zip 에서 기출 파일만 골라내는지 (외부 호출 없음) |
 | `npm run check:hwpx` | 한글(HWPX) 글자·쪽 추출 (외부 호출 없음) |
+| `npm run check:pdfbuf` | pdfjs 가 원본 버퍼를 가져가지 않는지 — 스캔본을 OCR 로 다시 보낼 수 있어야 한다 |
+| `npm run check:clova` | CLOVA OCR 연동 확인. 내부 전용 주소면 먼저 걸러 준다. 실제 호출이라 요금이 든다 |
 | `npm run smoke:stage3` | dev 서버를 켠 채 추출 → 문항 파싱 → 채점 기준 분석 → 확정까지 |
 | `npm run smoke:intake` | 인문·자연, 문제·해설이 섞인 PDF·HWPX 를 대학까지 알아내 기출로 묶는지 |
 | `npm run smoke:full` | **전 과정** — 기출 등록 → 기준 확정 → 학생 가입 → 배정 → 작성·제출 → 첨삭 → 공개 → 학생 확인 → 인쇄 4종 |
