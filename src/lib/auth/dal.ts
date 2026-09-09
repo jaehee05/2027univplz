@@ -15,17 +15,18 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const session = await verifySession();
   if (!session) return null;
 
-  // 역할은 가입 시 custom claim 에 넣어 둔다. 있으면 Firestore 를 읽지 않는다.
-  if (session.role === "teacher" || session.role === "student") {
+  // 역할과 이름이 토큰에 실려 오면 Firestore 를 읽지 않는다.
+  // 이름을 Auth 프로필에 넣기 전에 발급된 쿠키에는 이름이 없어서, 그때는 아래로 내려간다.
+  if ((session.role === "teacher" || session.role === "student") && session.name) {
     return {
       uid: session.uid,
       email: session.email ?? "",
-      displayName: session.name ?? session.email ?? "",
+      displayName: session.name,
       role: session.role,
     };
   }
 
-  // claim 이 아직 안 붙은 계정만 문서를 본다.
+  // claim 이나 이름이 아직 없는 계정은 문서를 본다.
   const snap = await adminDb().collection("users").doc(session.uid).get();
   if (!snap.exists) return null;
 
