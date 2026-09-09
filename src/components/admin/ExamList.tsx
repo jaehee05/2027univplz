@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { ExamIntake } from "@/components/admin/ExamIntake";
-import type { Exam } from "@/lib/types/exam";
+import type { Exam, University } from "@/lib/types/exam";
 
 const STATUS_LABEL = {
   none: "분석 전",
@@ -24,7 +24,15 @@ interface Draft {
   session: string;
 }
 
-export function ExamList({ univId, initial }: { univId: string; initial: Exam[] }) {
+export function ExamList({
+  univId,
+  initial,
+  universities,
+}: {
+  univId: string;
+  initial: Exam[];
+  universities: University[];
+}) {
   const [exams, setExams] = useState<Exam[]>(initial);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>({ year: "", title: "", session: "" });
@@ -104,7 +112,7 @@ export function ExamList({ univId, initial }: { univId: string; initial: Exam[] 
 
   return (
     <div className="mt-4 space-y-6">
-      <ExamIntake univId={univId} onExams={setExams} />
+      <ExamIntake universities={universities} fixedUnivId={univId} onExams={setExams} />
 
       {exams.length > 0 ? (
         <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200">

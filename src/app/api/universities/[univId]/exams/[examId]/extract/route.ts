@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { apiTeacher } from "@/lib/auth/dal";
 import { examRef, extractionRef, toExam } from "@/lib/exam/store";
-import { extractPdfCached, joinPages } from "@/lib/pdf/extract";
+import { extractCached, joinPages } from "@/lib/docs/extract";
 
 type Ctx = RouteContext<"/api/universities/[univId]/exams/[examId]/extract">;
 
@@ -43,7 +43,7 @@ export async function POST(request: Request, ctx: Ctx) {
 
   let document;
   try {
-    document = await extractPdfCached(pdf.storagePath, `${exam.year} ${exam.title}`);
+    document = await extractCached(pdf.storagePath, pdf.fileName, `${exam.year} ${exam.title}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "PDF 를 읽지 못했습니다.";
     return Response.json({ error: message }, { status: 502 });

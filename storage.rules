@@ -1,17 +1,36 @@
 rules_version = '2';
 
-// 기출 · 해설 PDF 는 teacher 만 읽고 쓴다.
+// 기출 · 해설 파일은 teacher 만 읽고 쓴다.
 service firebase.storage {
   match /b/{bucket}/o {
     function isTeacher() {
       return request.auth != null && request.auth.token.role == 'teacher';
     }
 
+    // PDF 와 한글(HWPX). 브라우저가 hwpx 의 MIME 을 모를 때가 있어 몇 가지를 함께 받는다.
+    function isAllowedType() {
+      return request.resource.contentType in [
+        'application/pdf',
+        'application/hwpx',
+        'application/haansofthwpx',
+        'application/vnd.hancom.hwpx',
+        'application/octet-stream'
+      ];
+    }
+
+    function isAllowedSize() {
+      return request.resource.size < 40 * 1024 * 1024;
+    }
+
+    // 대학을 고르지 않고 한꺼번에 올린 파일이 먼저 들어오는 자리
+    match /intake/{fileName} {
+      allow read: if isTeacher();
+      allow write: if isTeacher() && isAllowedSize() && isAllowedType();
+    }
+
     match /exams/{univId}/{examId}/{fileName} {
       allow read: if isTeacher();
-      allow write: if isTeacher()
-        && request.resource.size < 40 * 1024 * 1024
-        && request.resource.contentType == 'application/pdf';
+      allow write: if isTeacher() && isAllowedSize() && isAllowedType();
     }
 
     match /{allPaths=**} {

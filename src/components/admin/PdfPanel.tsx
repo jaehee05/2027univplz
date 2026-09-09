@@ -6,7 +6,7 @@ import { useState } from "react";
 import { clientStorage } from "@/lib/firebase/client";
 import type { Exam, PdfFile } from "@/lib/types/exam";
 
-const KIND_LABEL = { question: "문제 PDF", solution: "해설 · 모범답안 PDF" } as const;
+const KIND_LABEL = { question: "문제 파일", solution: "해설 · 모범답안 파일" } as const;
 
 interface Props {
   univId: string;
@@ -36,8 +36,9 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
     setError(null);
     setPreview(null);
 
-    if (file.type !== "application/pdf") {
-      setError("PDF 파일만 올릴 수 있습니다.");
+    const isHwpx = file.name.toLowerCase().endsWith(".hwpx");
+    if (!isHwpx && file.type !== "application/pdf") {
+      setError("PDF 또는 한글(HWPX) 파일만 올릴 수 있습니다.");
       return;
     }
     if (file.size > 40 * 1024 * 1024) {
@@ -46,12 +47,12 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
     }
 
     // 같은 자리에 덮어쓰면 이전 추출 결과와 헷갈리므로 시각을 붙인다.
-    const path = `exams/${univId}/${examId}/${kind}-${Date.now()}.pdf`;
+    const path = `exams/${univId}/${examId}/${kind}-${Date.now()}.${isHwpx ? "hwpx" : "pdf"}`;
     setProgress(0);
 
     try {
       const task = uploadBytesResumable(storageRef(clientStorage, path), file, {
-        contentType: "application/pdf",
+        contentType: isHwpx ? "application/hwpx" : "application/pdf",
       });
       await new Promise<void>((resolve, reject) => {
         task.on(
@@ -144,10 +145,10 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <label className="cursor-pointer rounded-md border border-neutral-300 px-3 py-2 text-sm">
-          {pdf ? "다시 올리기" : "PDF 올리기"}
+          {pdf ? "다시 올리기" : "파일 올리기"}
           <input
             type="file"
-            accept="application/pdf"
+            accept=".pdf,.hwpx,application/pdf"
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -236,6 +237,14 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
             {extraction.method === "pdfjs" ? (
               <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700">
                 텍스트 레이어
+              </span>
+            ) : extraction.method === "hwpx" ? (
+              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700">
+                한글 문서
+              </span>
+            ) : extraction.method === "clova" ? (
+              <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700">
+                스캔본 → CLOVA OCR
               </span>
             ) : (
               <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700">

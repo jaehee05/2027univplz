@@ -14,7 +14,8 @@ Claude API로 첨삭하는 서비스. 문제지·답안지·첨삭 결과는 모
 | 인증 | Firebase Auth (이메일/비밀번호 + Google) → 서버는 httpOnly 세션 쿠키 |
 | DB | Firestore |
 | 파일 | Firebase Storage (기출·해설 PDF) |
-| LLM | Claude API — 첨삭·분석 `claude-opus-5`, PDF 텍스트화 `claude-haiku-4-5` (환경변수 교체 가능) |
+| LLM | Claude API — 첨삭·분석 `claude-opus-5`, 파일 분류·텍스트화 `claude-haiku-4-5` (환경변수 교체 가능) |
+| OCR | 한국어 스캔본은 네이버 CLOVA OCR (설정돼 있을 때). 없으면 Claude 로 대신 읽는다 |
 
 - Claude 호출은 Route Handler(서버)에서만. `ANTHROPIC_API_KEY`는 클라이언트에 노출하지 않는다.
 - 서비스 계정은 `FIREBASE_SERVICE_ACCOUNT_KEY`(JSON 한 줄 문자열) 환경변수. 코드·문서에 값이 들어가지 않는다.
@@ -125,7 +126,8 @@ PATCH  /api/corrections/[id]             점수·코멘트 수정 · 공개 (tea
 
 | 용도 | 입력 | 출력 |
 |---|---|---|
-| PDF 텍스트화 | `document`(base64 PDF) — pdfjs 추출 글자 수가 임계치 미만일 때만 | 텍스트 |
+| 파일 분류 | 쪽별 앞부분 요약 + 등록된 대학 목록 | 대학 · 연도 · (계열 · 종류 · 쪽 범위)[] |
+| PDF 텍스트화 | `document`(base64 PDF) — CLOVA OCR 이 없거나 실패했을 때만 | 텍스트 |
 | 문항 파싱 | 문제 PDF 텍스트 | 문항 배열 |
 | 채점 기준 분석 | 문제 + 해설 텍스트 | `question_types` / `rubric` / `answer_style` / `model_answer_patterns` |
 | 첨삭 | 답안 + 논제 + 제시문 + 확정 rubric + 모범답안 | `scores` / `inline_comments` / `overall` / `revised_example` |
@@ -165,9 +167,10 @@ PATCH  /api/corrections/[id]             점수·코멘트 수정 · 공개 (tea
 | 명령 | 내용 |
 |---|---|
 | `npm run check:manuscript` | 원고지 배치·작성법 규칙 단위 검증 (외부 호출 없음) |
-| `npm run check:zip` | zip 에서 PDF 만 골라내는지 (외부 호출 없음) |
+| `npm run check:zip` | zip 에서 기출 파일만 골라내는지 (외부 호출 없음) |
+| `npm run check:hwpx` | 한글(HWPX) 글자·쪽 추출 (외부 호출 없음) |
 | `npm run smoke:stage3` | dev 서버를 켠 채 추출 → 문항 파싱 → 채점 기준 분석 → 확정까지 |
-| `npm run smoke:intake` | 인문·자연, 문제·해설이 섞인 PDF 를 제대로 나눠 기출로 묶는지 |
+| `npm run smoke:intake` | 인문·자연, 문제·해설이 섞인 PDF·HWPX 를 대학까지 알아내 기출로 묶는지 |
 | `npm run smoke:full` | **전 과정** — 기출 등록 → 기준 확정 → 학생 가입 → 배정 → 작성·제출 → 첨삭 → 공개 → 학생 확인 → 인쇄 4종 |
 | `npm run time:pages` | 로그인한 상태에서 관리 화면 응답 시간 측정 |
 

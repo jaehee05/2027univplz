@@ -29,7 +29,7 @@ export interface PdfFile {
   extraction: Extraction | null;
 }
 
-export type ExtractionMethod = "pdfjs" | "claude";
+export type ExtractionMethod = "pdfjs" | "claude" | "hwpx" | "clova";
 
 export interface Extraction {
   /** pdfjs 로 뽑았는지, 스캔본이라 Claude 에 그림째 넘겼는지 */

@@ -2,14 +2,13 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 
 import { apiTeacher } from "@/lib/auth/dal";
-import { exams, examRef, extractionRef, listExams, universityRef } from "@/lib/exam/store";
-import { extractPdfCached, joinPages } from "@/lib/pdf/extract";
-
-type Ctx = RouteContext<"/api/universities/[univId]/intake/commit">;
+import { exams, examRef, extractionRef, listExams, listUniversities } from "@/lib/exam/store";
+import { extractCached, joinPages } from "@/lib/docs/extract";
 
 export const maxDuration = 600;
 
 const itemSchema = z.object({
+  univId: z.string().min(1),
   storagePath: z.string().min(1),
   fileName: z.string().min(1).max(300),
   size: z.number().int().min(1),
@@ -19,21 +18,14 @@ const itemSchema = z.object({
   year: z.number().int().min(2000).max(2100),
   title: z.string().trim().min(1).max(60),
   session: z.string().trim().max(30).nullable(),
-  /** 이미 있는 기출에 붙일 때 */
-  examId: z.string().min(1).nullable(),
 });
 
-const bodySchema = z.object({ items: z.array(itemSchema).min(1).max(40) });
+const bodySchema = z.object({ items: z.array(itemSchema).min(1).max(60) });
 
-/** 선생님이 확인한 분류대로 기출을 만들고 PDF 를 붙인다. */
-export async function POST(request: Request, ctx: Ctx) {
+/** 선생님이 확인한 분류대로 대학별 기출을 만들고 파일을 붙인다. */
+export async function POST(request: Request) {
   const auth = await apiTeacher();
   if (!auth.ok) return auth.response;
-
-  const { univId } = await ctx.params;
-  if (!(await universityRef(univId).get()).exists) {
-    return Response.json({ error: "없는 대학입니다." }, { status: 404 });
-  }
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
@@ -43,14 +35,26 @@ export async function POST(request: Request, ctx: Ctx) {
     );
   }
 
-  const existing = await listExams(univId);
-  // 같은 (연도 · 이름 · 차수)면 하나의 기출로 묶는다.
-  const keyOf = (item: { year: number; title: string; session: string | null }) =>
-    `${item.year}|${item.title}|${item.session ?? ""}`;
+  const known = new Map((await listUniversities()).map((univ) => [univ.id, univ]));
+  const unknown = parsed.data.items.find((item) => !known.has(item.univId));
+  if (unknown) {
+    return Response.json({ error: `없는 대학입니다: ${unknown.univId}` }, { status: 400 });
+  }
+
+  /**
+   * 같은 (대학 · 연도 · 차수)면 하나의 기출로 본다.
+   * 제목은 넣지 않는다 — 문제와 해설이 다른 파일로 오면 읽어 낸 제목이 조금씩 달라서
+   * 제목까지 맞춰 묶으면 같은 시험이 둘로 갈린다. 같은 해 같은 차수의 시험은 하나다.
+   */
+  const keyOf = (item: { univId: string; year: number; session: string | null }) =>
+    `${item.univId}|${item.year}|${item.session ?? ""}`;
 
   const byKey = new Map<string, string>();
-  for (const exam of existing) {
-    byKey.set(keyOf({ year: exam.year, title: exam.title, session: exam.session ?? null }), exam.id);
+  const touchedUnivs = new Set(parsed.data.items.map((item) => item.univId));
+  for (const univId of touchedUnivs) {
+    for (const exam of await listExams(univId)) {
+      byKey.set(keyOf({ univId, year: exam.year, session: exam.session ?? null }), exam.id);
+    }
   }
 
   const touched = new Set<string>();
@@ -58,10 +62,10 @@ export async function POST(request: Request, ctx: Ctx) {
 
   for (const item of parsed.data.items) {
     const key = keyOf(item);
-    let examId = item.examId ?? byKey.get(key) ?? null;
+    let examId = byKey.get(key) ?? null;
 
     if (!examId) {
-      const created = await exams(univId).add({
+      const created = await exams(item.univId).add({
         year: item.year,
         title: item.title,
         session: item.session,
@@ -75,7 +79,7 @@ export async function POST(request: Request, ctx: Ctx) {
       byKey.set(key, examId);
     }
 
-    const ref = examRef(univId, examId);
+    const ref = examRef(item.univId, examId);
     const snap = await ref.get();
     if (!snap.exists) {
       warnings.push(`${item.fileName}: 기출을 찾지 못해 건너뛰었습니다.`);
@@ -84,7 +88,7 @@ export async function POST(request: Request, ctx: Ctx) {
     if (snap.data()?.[`${item.kind}Pdf`]) {
       const label = item.kind === "question" ? "문제" : "해설";
       warnings.push(
-        `${item.year}학년도 ${item.title} 의 ${label} 자리에 이미 파일이 있어 덮어썼습니다.`,
+        `${known.get(item.univId)!.name} ${item.year} ${item.title} 의 ${label} 자리에 이미 파일이 있어 덮어썼습니다.`,
       );
     }
 
@@ -100,14 +104,19 @@ export async function POST(request: Request, ctx: Ctx) {
         extraction: null,
       },
     });
+
     // 분류할 때 읽어 둔 결과가 캐시에 있으므로 추출까지 여기서 끝낸다.
     try {
-      const document = await extractPdfCached(item.storagePath, `${item.year} ${item.title}`);
+      const document = await extractCached(
+        item.storagePath,
+        item.fileName,
+        `${item.year} ${item.title}`,
+      );
       const text = joinPages(document.pageTexts, item.pageFrom, item.pageTo);
       const from = Math.max(1, item.pageFrom ?? 1);
       const to = Math.min(document.pageTexts.length, item.pageTo ?? document.pageTexts.length);
 
-      await extractionRef(univId, examId, item.kind).set({
+      await extractionRef(item.univId, examId, item.kind).set({
         text,
         method: document.method,
         updatedAt: FieldValue.serverTimestamp(),
@@ -132,12 +141,12 @@ export async function POST(request: Request, ctx: Ctx) {
       );
     }
 
-    touched.add(examId);
+    touched.add(`${item.univId}/${examId}`);
   }
 
-  return Response.json({
-    created: touched.size,
-    warnings,
-    exams: await listExams(univId),
-  });
+  const exams_ = Object.fromEntries(
+    await Promise.all([...touchedUnivs].map(async (id) => [id, await listExams(id)] as const)),
+  );
+
+  return Response.json({ created: touched.size, warnings, examsByUniv: exams_ });
 }

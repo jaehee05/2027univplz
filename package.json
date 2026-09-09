@@ -12,7 +12,8 @@
     "time:pages": "tsx scripts/time-pages.ts",
     "smoke:intake": "tsx scripts/smoke-intake.ts",
     "check:zip": "tsx scripts/check-zip.ts",
-    "smoke:full": "tsx scripts/smoke-full.ts"
+    "smoke:full": "tsx scripts/smoke-full.ts",
+    "check:hwpx": "tsx scripts/check-hwpx.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

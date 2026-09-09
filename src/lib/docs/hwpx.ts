@@ -1,9 +1,8 @@
-import "server-only";
-
 import { unzipSync } from "fflate";
 
 /**
  * HWPX(한글 2014 이후 표준 서식)에서 글자를 뽑는다.
+ * 비밀값을 다루지 않는 순수 함수라 단위 검증(`npm run check:hwpx`)에서 그대로 부른다.
  * HWPX 는 OWPML(XML)을 담은 zip 이라 별도 라이브러리 없이 읽을 수 있다.
  *
  * 구조: Contents/section0.xml, section1.xml … 안에

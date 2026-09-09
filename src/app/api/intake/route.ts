@@ -1,12 +1,10 @@
 import { z } from "zod";
 
 import { apiTeacher } from "@/lib/auth/dal";
-import { classifyPdf } from "@/lib/anthropic/classify";
+import { classifyDocument } from "@/lib/anthropic/classify";
 import { adminBucket } from "@/lib/firebase/admin";
-import { toUniversity, universityRef } from "@/lib/exam/store";
-import { extractPdfCached, pageDigest } from "@/lib/pdf/extract";
-
-type Ctx = RouteContext<"/api/universities/[univId]/intake">;
+import { listUniversities } from "@/lib/exam/store";
+import { extractCached, isSupportedDocument, pageDigest } from "@/lib/docs/extract";
 
 export const maxDuration = 600;
 
@@ -17,18 +15,12 @@ const bodySchema = z.object({
 });
 
 /**
- * 올린 PDF 한 개가 무엇인지 판단한다.
- * 여러 개를 올릴 때는 클라이언트가 파일마다 한 번씩 부른다 — 진행 상황을 보여 주기 위해서다.
+ * 올린 파일 한 개가 어느 대학 · 어느 연도 · 무엇인지 판단한다.
+ * 여러 개를 올릴 때는 클라이언트가 파일마다 부르되 몇 개씩 동시에 부른다.
  */
-export async function POST(request: Request, ctx: Ctx) {
+export async function POST(request: Request) {
   const auth = await apiTeacher();
   if (!auth.ok) return auth.response;
-
-  const { univId } = await ctx.params;
-  const univSnap = await universityRef(univId).get();
-  if (!univSnap.exists) {
-    return Response.json({ error: "없는 대학입니다." }, { status: 404 });
-  }
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
@@ -36,29 +28,32 @@ export async function POST(request: Request, ctx: Ctx) {
   }
   const { storagePath, fileName, size } = parsed.data;
 
+  if (!isSupportedDocument(fileName)) {
+    return Response.json({ error: `${fileName} 은 PDF·HWPX 가 아닙니다.` }, { status: 400 });
+  }
+
   const [exists] = await adminBucket().file(storagePath).exists();
   if (!exists) {
     return Response.json({ error: "업로드된 파일을 찾지 못했습니다." }, { status: 400 });
   }
 
   try {
-    const document = await extractPdfCached(storagePath, fileName);
-    const result = await classifyPdf({
+    const universities = await listUniversities();
+    const document = await extractCached(storagePath, fileName, fileName);
+    const result = await classifyDocument({
       fileName,
       pageCount: document.pageTexts.length,
       digest: pageDigest(document.pageTexts),
+      universities: universities.map((univ) => ({ id: univ.id, name: univ.name })),
     });
 
     return Response.json({
       file: { storagePath, fileName, size, pageCount: document.pageTexts.length },
       extraction: { method: document.method, note: document.note },
       ...result,
-      // 이 대학 화면에서 올린 것이니 대학은 화면 쪽을 따른다.
-      university: toUniversity(univSnap).name,
-      detectedUniversity: result.university,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "PDF 를 판단하지 못했습니다.";
+    const message = error instanceof Error ? error.message : "파일을 판단하지 못했습니다.";
     return Response.json({ error: message }, { status: 502 });
   }
 }

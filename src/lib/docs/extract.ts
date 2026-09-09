@@ -3,7 +3,21 @@ import "server-only";
 import { anthropic } from "@/lib/anthropic/client";
 import { adminBucket } from "@/lib/firebase/admin";
 import { serverEnv } from "@/lib/env";
+import { extractHwpx } from "@/lib/docs/hwpx";
+import { isClovaConfigured, ocrWithClova } from "@/lib/docs/clova";
 import type { ExtractionMethod } from "@/lib/types/exam";
+
+/** 올릴 수 있는 파일 형식. zip 은 브라우저에서 풀어 이 둘만 올라온다. */
+export const ACCEPTED_EXTENSIONS = [".pdf", ".hwpx"] as const;
+
+export function isSupportedDocument(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return ACCEPTED_EXTENSIONS.some((extension) => lower.endsWith(extension));
+}
+
+export function isHwpx(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith(".hwpx");
+}
 
 /** 이 값보다 페이지당 글자가 적으면 스캔본으로 보고 Claude 에 넘긴다. */
 const CHARS_PER_PAGE_THRESHOLD = 60;
@@ -12,7 +26,7 @@ const CHARS_PER_PAGE_THRESHOLD = 60;
 const CLAUDE_MAX_PAGES = 100;
 const CLAUDE_MAX_BYTES = 30 * 1024 * 1024;
 
-export interface PdfDocument {
+export interface ExtractedDocument {
   method: ExtractionMethod;
   /** 쪽별 글자. 1쪽이 index 0. */
   pageTexts: string[];
@@ -103,7 +117,7 @@ async function readWithClaude(data: Uint8Array, hint: string): Promise<string[]>
  * PDF 를 쪽별 텍스트로 만든다.
  * 텍스트 레이어가 있으면 그대로 쓰고, 거의 없으면 Claude 로 넘긴다.
  */
-export async function extractPdfDocument(data: Uint8Array, label: string): Promise<PdfDocument> {
+async function extractPdf(data: Uint8Array, label: string): Promise<ExtractedDocument> {
   let pageTexts: string[] = [];
   let pdfjsError: string | null = null;
 
@@ -135,6 +149,29 @@ export async function extractPdfDocument(data: Uint8Array, label: string): Promi
     ? `pdfjs 읽기 실패(${pdfjsError})`
     : `텍스트 레이어가 쪽당 ${Math.round(perPage)}자뿐`;
 
+  // 한국어 스캔본은 CLOVA OCR 이 더 정확하고 빠르다. 설정돼 있으면 먼저 쓴다.
+  if (isClovaConfigured()) {
+    try {
+      const pages = await ocrWithClova(data, label);
+      const total = pages.join("").length;
+      if (total > 0) {
+        return {
+          method: "clova",
+          pageTexts: pages,
+          note: `${reason} — 스캔본으로 보고 CLOVA OCR 로 읽었습니다 (${pages.length}쪽 · ${total}자).`,
+        };
+      }
+    } catch (error) {
+      // OCR 이 막히면 Claude 로 넘어간다. 이유는 남긴다.
+      const detail = error instanceof Error ? error.message : String(error);
+      return {
+        method: "claude",
+        pageTexts: await readWithClaude(data, label),
+        note: `${reason} — CLOVA OCR 실패(${detail})로 ${serverEnv.extractionModel} 로 옮겼습니다.`,
+      };
+    }
+  }
+
   return {
     method: "claude",
     pageTexts: await readWithClaude(data, label),
@@ -142,15 +179,44 @@ export async function extractPdfDocument(data: Uint8Array, label: string): Promi
   };
 }
 
+/** HWPX 는 OWPML(XML)이라 글자가 그대로 들어 있다. 스캔본이라는 것이 없다. */
+function extractHwpxDocument(data: Uint8Array): ExtractedDocument {
+  const result = extractHwpx(data);
+  const chars = result.pageTexts.join("").length;
+
+  return {
+    method: "hwpx",
+    pageTexts: result.pageTexts,
+    note: result.hadPageBreaks
+      ? `한글 문서에서 바로 읽었습니다 (문단 ${result.paragraphs}개 · 쪽 나눔 표시 기준 ${result.pageTexts.length}쪽 · ${chars}자).`
+      : `한글 문서에서 바로 읽었습니다 (문단 ${result.paragraphs}개 · ${chars}자). ` +
+        `쪽 나눔 표시가 없어 분량으로 ${result.pageTexts.length}쪽으로 나눴습니다 — 쪽 범위는 대략적입니다.`,
+  };
+}
+
+/** 파일 형식에 맞는 방법으로 글자를 뽑는다. */
+export async function extractDocument(
+  data: Uint8Array,
+  fileName: string,
+  label: string,
+): Promise<ExtractedDocument> {
+  if (isHwpx(fileName)) return extractHwpxDocument(data);
+  return extractPdf(data, label);
+}
+
 /**
- * 같은 PDF 를 여러 번(분류할 때 · 문제로 붙일 때 · 해설로 붙일 때) 읽게 되므로
+ * 같은 파일을 여러 번(분류할 때 · 문제로 붙일 때 · 해설로 붙일 때) 읽게 되므로
  * 추출 결과를 Storage 에 캐시해 둔다. 스캔본은 Claude 를 다시 부르면 돈이 든다.
  */
 function cachePath(storagePath: string): string {
   return `${storagePath}.pages.json`;
 }
 
-export async function extractPdfCached(storagePath: string, label: string): Promise<PdfDocument> {
+export async function extractCached(
+  storagePath: string,
+  fileName: string,
+  label: string,
+): Promise<ExtractedDocument> {
   const bucket = adminBucket();
   const cache = bucket.file(cachePath(storagePath));
 
@@ -158,14 +224,14 @@ export async function extractPdfCached(storagePath: string, label: string): Prom
   if (hit) {
     try {
       const [buffer] = await cache.download();
-      return JSON.parse(buffer.toString("utf8")) as PdfDocument;
+      return JSON.parse(buffer.toString("utf8")) as ExtractedDocument;
     } catch {
       // 캐시가 깨졌으면 무시하고 다시 뽑는다.
     }
   }
 
   const [buffer] = await bucket.file(storagePath).download();
-  const result = await extractPdfDocument(new Uint8Array(buffer), label);
+  const result = await extractDocument(new Uint8Array(buffer), fileName, label);
 
   await cache
     .save(JSON.stringify(result), { contentType: "application/json" })

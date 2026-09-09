@@ -4,15 +4,18 @@ import { ref as storageRef, uploadBytes } from "firebase/storage";
 import { useRef, useState } from "react";
 
 import { clientStorage } from "@/lib/firebase/client";
-import { isZip, unzipPdfs } from "@/lib/pdf/zip";
-import type { Exam } from "@/lib/types/exam";
+import { isZip, unzipDocuments } from "@/lib/docs/zip";
+import type { Exam, University } from "@/lib/types/exam";
+
+/** 파일 여러 개를 동시에 처리한다. 너무 많이 한꺼번에 보내면 서버가 막힌다. */
+const CONCURRENCY = 4;
 
 type Track = "humanities" | "science" | "unknown";
 type Kind = "question" | "solution";
 
 interface Proposal {
-  /** 화면에서만 쓰는 행 식별자 */
   key: string;
+  univId: string | null;
   storagePath: string;
   fileName: string;
   size: number;
@@ -25,13 +28,12 @@ interface Proposal {
   title: string;
   session: string | null;
   confidence: "high" | "medium" | "low";
-  /** 등록할지 — 자연계열은 기본으로 꺼 둔다 */
   include: boolean;
 }
 
 interface FileState {
   name: string;
-  status: "uploading" | "reading" | "done" | "error";
+  status: "waiting" | "uploading" | "reading" | "done" | "error";
   message?: string;
 }
 
@@ -42,16 +44,51 @@ const TRACK_LABEL: Record<Track, string> = {
 };
 const KIND_LABEL: Record<Kind, string> = { question: "문제", solution: "해설" };
 const CONFIDENCE_LABEL = { high: "확실", medium: "보통", low: "불확실" } as const;
+const STATUS_LABEL = {
+  waiting: "대기",
+  uploading: "올리는 중",
+  reading: "읽는 중",
+  done: "완료",
+  error: "실패",
+} as const;
+const STATUS_CLASS = {
+  waiting: "text-neutral-400",
+  uploading: "text-neutral-500",
+  reading: "text-sky-600",
+  done: "text-emerald-600",
+  error: "text-red-600",
+} as const;
 
 const cellInput = "w-full rounded border border-neutral-300 px-2 py-1 text-sm";
 
-export function ExamIntake({
-  univId,
-  onExams,
-}: {
-  univId: string;
-  onExams: (exams: Exam[]) => void;
-}) {
+/**
+ * 하나로 묶일 자료들의 이름을 통일한다.
+ * 문제 쪽 이름을 기준으로 삼는다 — 해설은 "…해설", "…채점 기준"처럼 길어지기 쉽다.
+ */
+function normalizeTitles(rows: Proposal[]): Proposal[] {
+  const chosen = new Map<string, string>();
+  for (const row of rows) {
+    const key = `${row.univId ?? ""}|${row.year}|${row.session ?? ""}`;
+    const current = chosen.get(key);
+    if (!current || (row.kind === "question" && row.title.length <= current.length)) {
+      chosen.set(key, row.title);
+    }
+  }
+  return rows.map((row) => ({
+    ...row,
+    title: chosen.get(`${row.univId ?? ""}|${row.year}|${row.session ?? ""}`) ?? row.title,
+  }));
+}
+
+interface Props {
+  universities: University[];
+  /** 특정 대학 화면에서 열었으면 그 대학으로 미리 정해 둔다 */
+  fixedUnivId?: string;
+  onExams?: (exams: Exam[]) => void;
+  onDone?: () => void;
+}
+
+export function ExamIntake({ universities, fixedUnivId, onExams, onDone }: Props) {
   const [files, setFiles] = useState<FileState[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [busy, setBusy] = useState(false);
@@ -65,15 +102,17 @@ export function ExamIntake({
     setFiles((prev) => prev.map((f) => (f.name === name ? { ...f, ...patch } : f)));
   }
 
-  /** PDF 한 개를 올리고 무엇인지 판단받는다. */
   async function ingest(name: string, data: Blob, size: number) {
     mark(name, { status: "uploading" });
     const safe = name.replace(/[^\w.\-가-힣]/g, "_");
-    const path = `exams/${univId}/_intake/${Date.now()}-${safe}`;
-    await uploadBytes(storageRef(clientStorage, path), data, { contentType: "application/pdf" });
+    const extension = name.toLowerCase().endsWith(".hwpx") ? "hwpx" : "pdf";
+    const path = `intake/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
+    await uploadBytes(storageRef(clientStorage, path), data, {
+      contentType: extension === "hwpx" ? "application/hwpx" : "application/pdf",
+    });
 
     mark(name, { status: "reading" });
-    const response = await fetch(`/api/universities/${univId}/intake`, {
+    const response = await fetch("/api/intake", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ storagePath: path, fileName: name, size }),
@@ -82,8 +121,11 @@ export function ExamIntake({
     if (!response.ok) throw new Error(payload.error ?? "판단에 실패했습니다.");
 
     const fallbackYear = payload.year ?? new Date().getFullYear() + 1;
+    const univId = fixedUnivId ?? payload.univId ?? null;
+
     const rows: Proposal[] = (payload.parts ?? []).map((part: Proposal, index: number) => ({
       key: `${path}#${index}`,
+      univId,
       storagePath: path,
       fileName: name,
       size,
@@ -100,12 +142,22 @@ export function ExamIntake({
       include: part.track !== "science",
     }));
 
-    setProposals((prev) => [...prev, ...rows]);
+    // 같은 (대학 · 연도 · 차수)면 하나의 기출로 묶이므로, 이름도 하나로 맞춰 보여 준다.
+    // 문제와 해설이 다른 파일로 오면 읽어 낸 이름이 조금씩 달라서 그대로 두면 헷갈린다.
+    setProposals((prev) => normalizeTitles([...prev, ...rows]));
     mark(name, {
       status: "done",
-      message: `${payload.file.pageCount}쪽 · ${rows.length}개로 나눔${
-        payload.extraction.method === "claude" ? " · 스캔본" : ""
-      }`,
+      message: [
+        `${payload.file.pageCount}쪽 · ${rows.length}개로 나눔`,
+        univId ? null : "대학 못 알아냄",
+        payload.extraction.method === "clova"
+          ? "스캔본 · OCR"
+          : payload.extraction.method === "claude"
+            ? "스캔본"
+            : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
     });
   }
 
@@ -115,37 +167,45 @@ export function ExamIntake({
     setError(null);
     setResult(null);
 
-    // zip 은 브라우저에서 풀어 안의 PDF 만 올린다.
+    // zip 은 브라우저에서 풀어 안의 기출 파일만 올린다.
     const jobs: { name: string; blob: Blob; size: number }[] = [];
     for (const file of picked) {
       if (isZip(file)) {
         try {
-          for (const entry of await unzipPdfs(file)) {
-            const blob = new Blob([entry.data as BlobPart], { type: "application/pdf" });
+          for (const entry of await unzipDocuments(file)) {
+            const blob = new Blob([entry.data as BlobPart]);
             jobs.push({ name: entry.name, blob, size: blob.size });
           }
         } catch (caught) {
           setError(caught instanceof Error ? caught.message : `${file.name} 을 풀지 못했습니다.`);
         }
-      } else if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+      } else if (/\.(pdf|hwpx)$/i.test(file.name)) {
         jobs.push({ name: file.name, blob: file, size: file.size });
       } else {
-        setError(`${file.name} 은 PDF 도 zip 도 아니라 건너뜁니다.`);
+        setError(`${file.name} 은 PDF · HWPX · zip 이 아니라 건너뜁니다.`);
       }
     }
 
-    setFiles(jobs.map((job) => ({ name: job.name, status: "uploading" as const })));
+    setFiles(jobs.map((job) => ({ name: job.name, status: "waiting" as const })));
 
-    for (const job of jobs) {
-      try {
-        await ingest(job.name, job.blob, job.size);
-      } catch (caught) {
-        mark(job.name, {
-          status: "error",
-          message: caught instanceof Error ? caught.message : "실패",
-        });
-      }
-    }
+    // 순서대로 하면 파일 수만큼 기다려야 해서 몇 개씩 동시에 돌린다.
+    const queue = [...jobs];
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+        for (;;) {
+          const job = queue.shift();
+          if (!job) return;
+          try {
+            await ingest(job.name, job.blob, job.size);
+          } catch (caught) {
+            mark(job.name, {
+              status: "error",
+              message: caught instanceof Error ? caught.message : "실패",
+            });
+          }
+        }
+      }),
+    );
 
     setBusy(false);
   }
@@ -160,14 +220,21 @@ export function ExamIntake({
       setError("등록할 자료를 하나 이상 선택하세요.");
       return;
     }
+    const missing = items.filter((row) => !row.univId);
+    if (missing.length > 0) {
+      setError(`대학을 고르지 않은 자료가 ${missing.length}개 있습니다.`);
+      return;
+    }
+
     setCommitting(true);
     setError(null);
     try {
-      const response = await fetch(`/api/universities/${univId}/intake/commit`, {
+      const response = await fetch("/api/intake/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           items: items.map((row) => ({
+            univId: row.univId,
             storagePath: row.storagePath,
             fileName: row.fileName,
             size: row.size,
@@ -178,14 +245,13 @@ export function ExamIntake({
             year: row.year,
             title: row.title,
             session: row.session || null,
-            examId: null,
           })),
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "등록에 실패했습니다.");
 
-      onExams(data.exams ?? []);
+      if (fixedUnivId && onExams) onExams(data.examsByUniv?.[fixedUnivId] ?? []);
       setProposals([]);
       setFiles([]);
       setResult(
@@ -193,6 +259,7 @@ export function ExamIntake({
           " ",
         ),
       );
+      onDone?.();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "등록에 실패했습니다.");
     } finally {
@@ -201,6 +268,7 @@ export function ExamIntake({
   }
 
   const selected = proposals.filter((row) => row.include).length;
+  const done = files.filter((f) => f.status === "done" || f.status === "error").length;
 
   return (
     <div>
@@ -221,17 +289,18 @@ export function ExamIntake({
           dragging ? "border-sky-400 bg-sky-50" : "border-neutral-300",
         ].join(" ")}
       >
-        <p className="font-medium">기출 PDF 를 여기에 끌어다 놓으세요</p>
+        <p className="font-medium">기출 파일을 여기에 끌어다 놓으세요</p>
         <p className="mt-1 text-sm text-neutral-500">
-          여러 개를 한꺼번에 올려도 되고, zip 으로 묶어서 올려도 됩니다.
+          PDF · 한글(HWPX) · zip · 여러 개 한꺼번에
           <br />
-          연도 · 인문/자연 · 문제/해설을 읽어서 알아서 나눕니다. 등록 전에 확인하실 수 있습니다.
+          {fixedUnivId ? "" : "어느 대학인지, "}연도 · 인문/자연 · 문제/해설을 읽어서 알아서
+          나눕니다. 등록 전에 확인하실 수 있습니다.
         </p>
         <input
           ref={inputRef}
           type="file"
           multiple
-          accept="application/pdf,.pdf,.zip,application/zip"
+          accept=".pdf,.hwpx,.zip,application/pdf,application/zip"
           className="hidden"
           onChange={(event) => {
             const picked = Array.from(event.target.files ?? []);
@@ -242,33 +311,32 @@ export function ExamIntake({
       </div>
 
       {files.length > 0 ? (
-        <ul className="mt-3 space-y-1 text-sm">
-          {files.map((file) => (
-            <li key={file.name} className="flex items-center gap-2">
-              <span className="w-16 shrink-0 text-xs">
-                {file.status === "uploading" ? (
-                  <span className="text-neutral-500">올리는 중</span>
-                ) : file.status === "reading" ? (
-                  <span className="text-sky-600">읽는 중</span>
-                ) : file.status === "error" ? (
-                  <span className="text-red-600">실패</span>
-                ) : (
-                  <span className="text-emerald-600">완료</span>
-                )}
-              </span>
-              <span className="truncate">{file.name}</span>
-              {file.message ? (
-                <span
-                  className={
-                    file.status === "error" ? "text-xs text-red-600" : "text-xs text-neutral-400"
-                  }
-                >
-                  {file.message}
+        <div className="mt-3">
+          {busy ? (
+            <p className="mb-2 text-sm text-neutral-500">
+              {done} / {files.length} 처리함 · {CONCURRENCY}개씩 동시에 읽는 중…
+            </p>
+          ) : null}
+          <ul className="space-y-1 text-sm">
+            {files.map((file) => (
+              <li key={file.name} className="flex items-center gap-2">
+                <span className={`w-16 shrink-0 text-xs ${STATUS_CLASS[file.status]}`}>
+                  {STATUS_LABEL[file.status]}
                 </span>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+                <span className="truncate">{file.name}</span>
+                {file.message ? (
+                  <span
+                    className={
+                      file.status === "error" ? "text-xs text-red-600" : "text-xs text-neutral-400"
+                    }
+                  >
+                    {file.message}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {proposals.length > 0 ? (
@@ -287,15 +355,17 @@ export function ExamIntake({
             </button>
           </div>
           <p className="mt-1 text-sm text-neutral-500">
-            자연계열은 자동으로 꺼 두었습니다. 연도 · 이름 · 차수가 같으면 하나의 기출로 묶입니다.
+            자연계열은 자동으로 꺼 두었습니다. 대학 · 연도 · 이름 · 차수가 같으면 하나의 기출로
+            묶입니다.
           </p>
 
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[860px] text-sm">
+            <table className="w-full min-w-[980px] text-sm">
               <thead className="border-b border-neutral-200 text-left text-xs text-neutral-500">
                 <tr>
                   <th className="w-10 py-2">등록</th>
                   <th className="py-2">파일 · 쪽</th>
+                  {fixedUnivId ? null : <th className="py-2">대학</th>}
                   <th className="py-2">계열</th>
                   <th className="py-2">종류</th>
                   <th className="w-20 py-2">학년도</th>
@@ -314,7 +384,7 @@ export function ExamIntake({
                       />
                     </td>
                     <td className="py-2 pr-2">
-                      <div className="max-w-56 truncate" title={row.fileName}>
+                      <div className="max-w-52 truncate" title={row.fileName}>
                         {row.fileName}
                       </div>
                       <div className="mt-1 flex items-center gap-1 text-xs text-neutral-500">
@@ -323,7 +393,7 @@ export function ExamIntake({
                           onChange={(event) =>
                             patch(row.key, { pageFrom: Number(event.target.value) || 1 })
                           }
-                          className="w-12 rounded border border-neutral-300 px-1 py-0.5 text-center"
+                          className="w-11 rounded border border-neutral-300 px-1 py-0.5 text-center"
                         />
                         <span>~</span>
                         <input
@@ -331,7 +401,7 @@ export function ExamIntake({
                           onChange={(event) =>
                             patch(row.key, { pageTo: Number(event.target.value) || 1 })
                           }
-                          className="w-12 rounded border border-neutral-300 px-1 py-0.5 text-center"
+                          className="w-11 rounded border border-neutral-300 px-1 py-0.5 text-center"
                         />
                         <span>/ {row.pageCount}쪽</span>
                         {row.confidence !== "high" ? (
@@ -341,12 +411,31 @@ export function ExamIntake({
                         ) : null}
                       </div>
                     </td>
+
+                    {fixedUnivId ? null : (
+                      <td className="py-2 pr-2">
+                        <select
+                          value={row.univId ?? ""}
+                          onChange={(event) => patch(row.key, { univId: event.target.value || null })}
+                          className={[
+                            cellInput,
+                            row.univId ? "" : "border-amber-400 bg-amber-50",
+                          ].join(" ")}
+                        >
+                          <option value="">— 고르세요 —</option>
+                          {universities.map((univ) => (
+                            <option key={univ.id} value={univ.id}>
+                              {univ.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    )}
+
                     <td className="py-2 pr-2">
                       <select
                         value={row.track}
-                        onChange={(event) =>
-                          patch(row.key, { track: event.target.value as Track })
-                        }
+                        onChange={(event) => patch(row.key, { track: event.target.value as Track })}
                         className={cellInput}
                       >
                         {(Object.keys(TRACK_LABEL) as Track[]).map((track) => (

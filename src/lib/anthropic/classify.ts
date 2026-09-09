@@ -21,7 +21,8 @@ const partSchema = z.object({
 });
 
 const classifySchema = z.object({
-  university: z.string().nullable(),
+  univId: z.string().nullable().describe("등록된 대학 목록의 id. 모르면 null"),
+  universityText: z.string().nullable().describe("파일에서 읽어 낸 대학 이름 그대로"),
   year: z.number().int().nullable(),
   parts: z.array(partSchema),
   note: z.string().describe("판단이 애매했던 점. 없으면 빈 문자열"),
@@ -30,31 +31,37 @@ const classifySchema = z.object({
 export type ClassifiedPart = z.infer<typeof partSchema>;
 
 export interface ClassifyResult {
-  university: string | null;
+  univId: string | null;
+  universityText: string | null;
   year: number | null;
   parts: ClassifiedPart[];
   note: string;
   usage: CallUsage;
 }
 
-/** PDF 한 개에 무엇이 들어 있는지 갈래별로 나눈다. */
-export async function classifyPdf(input: {
+/** 파일 한 개에 무엇이 들어 있는지, 어느 대학 것인지 갈래별로 나눈다. */
+export async function classifyDocument(input: {
   fileName: string;
   pageCount: number;
   digest: string;
+  universities: { id: string; name: string }[];
 }): Promise<ClassifyResult> {
   const template = await loadPrompt("classify-pdf");
   const prompt = fillPrompt(template, {
     fileName: input.fileName,
     pageCount: String(input.pageCount),
     digest: input.digest,
+    universities:
+      input.universities.map((univ) => `- id \`${univ.id}\` — ${univ.name}`).join("\n") ||
+      "(등록된 대학이 없습니다. univId 는 null 로 두세요.)",
   });
 
-  const model = serverEnv.correctionModel;
+  // 쪽별 요약만 보고 가려내는 일이라 가벼운 모델로 충분하다.
+  // 묶음 업로드에서 파일마다 한 번씩 부르므로 속도가 중요하다.
+  const model = serverEnv.classifyModel;
   const stream = anthropic().messages.stream({
     model,
     max_tokens: 8000,
-    thinking: { type: "adaptive" },
     messages: [{ role: "user", content: prompt }],
     output_config: { format: zodOutputFormat(classifySchema) },
   });
@@ -63,8 +70,12 @@ export async function classifyPdf(input: {
   const parsed = message.parsed_output;
   if (!parsed) throw new Error("PDF 분류 결과를 읽지 못했습니다.");
 
+  // 목록에 없는 id 를 만들어 왔으면 버린다.
+  const known = new Set(input.universities.map((univ) => univ.id));
+
   return {
-    university: parsed.university,
+    univId: parsed.univId && known.has(parsed.univId) ? parsed.univId : null,
+    universityText: parsed.universityText,
     year: parsed.year,
     // 쪽 범위가 뒤집혀 오면 바로잡는다.
     parts: parsed.parts.map((part) => ({

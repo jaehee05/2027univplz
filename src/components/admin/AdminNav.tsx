@@ -5,6 +5,7 @@ import { LogoutButton } from "@/components/auth/LogoutButton";
 const LINKS = [
   { href: "/admin", label: "관리 홈" },
   { href: "/admin/universities", label: "대학 · 기출" },
+  { href: "/admin/intake", label: "기출 올리기" },
   { href: "/admin/students", label: "학생" },
   { href: "/admin/assignments", label: "과제 · 첨삭" },
   { href: "/admin/manuscript", label: "원고지" },

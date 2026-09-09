@@ -38,6 +38,20 @@ export const serverEnv = {
   get extractionModel(): string {
     return process.env.ANTHROPIC_MODEL_EXTRACTION ?? "claude-haiku-4-5";
   },
+  /** 올린 파일이 무엇인지 가려내는 작업 — 여러 개를 동시에 돌리므로 빠른 모델을 쓴다 */
+  get classifyModel(): string {
+    return process.env.ANTHROPIC_MODEL_CLASSIFY ?? "claude-haiku-4-5";
+  },
+  /**
+   * 네이버 클라우드 CLOVA OCR — 한국어 스캔본 처리용. 없으면 Claude 로 넘어간다.
+   * 값은 .env.local · Vercel 환경변수로만 넣는다.
+   */
+  get clovaOcrInvokeUrl(): string | null {
+    return process.env.CLOVA_OCR_INVOKE_URL || null;
+  },
+  get clovaOcrSecret(): string | null {
+    return process.env.CLOVA_OCR_SECRET || null;
+  },
   /** Firebase 세션 쿠키 최대 수명은 14일. */
   get sessionCookieDays(): number {
     const raw = Number(process.env.SESSION_COOKIE_DAYS ?? 5);
