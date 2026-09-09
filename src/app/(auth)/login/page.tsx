@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
-import type { UserCredential } from "firebase/auth";
+import type { User, UserCredential } from "firebase/auth";
 
 import {
   authErrorMessage,
@@ -20,8 +20,8 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function finish(credential: UserCredential) {
-    const response = await exchangeSession(credential);
+  async function finish(user: User) {
+    const response = await exchangeSession(user);
     const data = await response.json().catch(() => ({}));
 
     if (response.status === 409 && data.code === "NOT_REGISTERED") {
@@ -39,7 +39,8 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await finish(await action());
+      const credential = await action();
+      await finish(credential.user);
     } catch (caught) {
       setError(authErrorMessage(caught));
       setBusy(false);

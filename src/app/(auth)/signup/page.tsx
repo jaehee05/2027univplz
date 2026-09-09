@@ -2,16 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState } from "react";
-import type { UserCredential } from "firebase/auth";
+import { useEffect, useState } from "react";
+import { onAuthStateChanged, type User } from "firebase/auth";
 
 import {
   authErrorMessage,
-  emailSignUp,
+  emailSignUpOrSignIn,
   exchangeSession,
   googleSignIn,
   homeFor,
 } from "@/lib/auth/client";
+import { clientAuth } from "@/lib/firebase/client";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -21,15 +22,38 @@ export default function SignupPage() {
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 로그인 화면에서 "등록되지 않은 계정"으로 넘어온 경우
+  const [pendingUser, setPendingUser] = useState<User | null>(null);
 
-  async function finish(credential: UserCredential) {
-    const idToken = await credential.user.getIdToken();
+  useEffect(
+    () =>
+      onAuthStateChanged(clientAuth, (user) => {
+        setPendingUser(user);
+        if (user?.email) setEmail((current) => current || user.email!);
+        if (user?.displayName) setDisplayName((current) => current || user.displayName!);
+      }),
+    [],
+  );
+
+  /**
+   * 가입에 쓸 Firebase 사용자를 확보한다.
+   * 로그인 화면에서 "등록되지 않은 계정"으로 넘어온 경우처럼
+   * 이미 계정이 있는 상태도 여기서 이어받는다.
+   */
+  async function resolveEmailUser(): Promise<User> {
+    const signedIn = clientAuth.currentUser;
+    if (signedIn && (!email || signedIn.email === email)) return signedIn;
+    return emailSignUpOrSignIn(email, password);
+  }
+
+  async function finish(user: User) {
+    const idToken = await user.getIdToken();
     const response = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         idToken,
-        displayName: displayName || credential.user.displayName || "이름 없음",
+        displayName: displayName || user.displayName || "이름 없음",
         inviteCode: inviteCode || undefined,
       }),
     });
@@ -37,13 +61,13 @@ export default function SignupPage() {
     if (!response.ok) throw new Error(data.error ?? "가입에 실패했습니다.");
 
     // 역할(custom claim)이 담긴 토큰으로 세션을 다시 발급받는다.
-    await exchangeSession(credential, true);
+    await exchangeSession(user, true);
 
     router.replace(homeFor(data.role));
     router.refresh();
   }
 
-  async function run(action: () => Promise<UserCredential>) {
+  async function run(action: () => Promise<User>) {
     setBusy(true);
     setError(null);
     try {
@@ -63,11 +87,18 @@ export default function SignupPage() {
         </p>
       </header>
 
+      {pendingUser ? (
+        <p className="rounded-md bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+          <strong>{pendingUser.email}</strong> 계정이 아직 등록되지 않았습니다. 이름을 확인하고
+          아래 버튼을 눌러 가입을 마쳐 주세요.
+        </p>
+      ) : null}
+
       <form
         className="flex flex-col gap-3"
         onSubmit={(event) => {
           event.preventDefault();
-          void run(() => emailSignUp(email, password));
+          void run(() => resolveEmailUser());
         }}
       >
         <label className="flex flex-col gap-1 text-sm">
@@ -79,22 +110,22 @@ export default function SignupPage() {
             className="rounded-md border border-neutral-300 px-3 py-2 text-base"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm">
+        <label className={`flex-col gap-1 text-sm ${pendingUser ? "hidden" : "flex"}`}>
           이메일
           <input
             type="email"
-            required
+            required={!pendingUser}
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             className="rounded-md border border-neutral-300 px-3 py-2 text-base"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm">
+        <label className={`flex-col gap-1 text-sm ${pendingUser ? "hidden" : "flex"}`}>
           비밀번호
           <input
             type="password"
-            required
+            required={!pendingUser}
             minLength={6}
             autoComplete="new-password"
             value={password}
@@ -117,18 +148,20 @@ export default function SignupPage() {
           disabled={busy}
           className="mt-2 rounded-md bg-neutral-900 px-4 py-2.5 font-medium text-white disabled:opacity-50"
         >
-          {busy ? "처리 중…" : "가입하기"}
+          {busy ? "처리 중…" : pendingUser ? "가입 마치기" : "가입하기"}
         </button>
       </form>
 
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void run(googleSignIn)}
-        className="rounded-md border border-neutral-300 px-4 py-2.5 font-medium disabled:opacity-50"
-      >
-        구글 계정으로 가입
-      </button>
+      {pendingUser ? null : (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void run(async () => (await googleSignIn()).user)}
+          className="rounded-md border border-neutral-300 px-4 py-2.5 font-medium disabled:opacity-50"
+        >
+          구글 계정으로 가입
+        </button>
+      )}
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
