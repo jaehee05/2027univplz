@@ -10,7 +10,7 @@ function render(text: string, spec = DEFAULT_SPEC) {
     const line: string[] = [];
     for (let c = 0; c < cap; c += 1) {
       const cell = layout.cells.find((x) => x.row === r && x.col === c);
-      line.push(cell ? (cell.text === "" ? "_" : cell.text) : "·");
+      line.push(cell ? (cell.text === "" ? "_" : cell.text + cell.appended) : "·");
     }
     rows.push(`${String(r).padStart(2)}|${line.join("")}|${cap}칸`);
   }
@@ -63,7 +63,11 @@ console.log("\n=== 4. 문장부호는 줄 첫 칸에 오지 않는다 ===");
   const startsWithPunct = lineStarts.some((c) => ".,!?".includes(c.text[0]));
   const lastCell = layout.cells.at(-1)!;
   check("줄 첫 칸에 문장부호 없음", !startsWithPunct);
-  check("앞 칸에 병기됨", lastCell.text === "가.", `"${lastCell.text}"`);
+  check(
+    "앞 칸에 병기됨 (본 글자와 부호를 분리)",
+    lastCell.text === "가" && lastCell.appended === ".",
+    `text="${lastCell.text}" appended="${lastCell.appended}"`,
+  );
 }
 
 console.log("\n=== 5. 줄 첫 칸 띄어쓰기는 칸을 쓰지 않는다 ===");

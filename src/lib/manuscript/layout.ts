@@ -5,8 +5,10 @@ export type CellKind = "text" | "space" | "indent";
 export interface Cell {
   row: number;
   col: number;
-  /** 칸에 들어가는 글자. 숫자·영문은 두 자, 병기된 문장부호가 붙으면 두 글자가 될 수 있다. */
+  /** 칸에 들어가는 글자. 숫자·영문은 한 칸에 두 자가 들어간다. */
   text: string;
+  /** 줄 첫 칸에 올 수 없어 이 칸에 함께 적은 문장부호 */
+  appended: string;
   /** 원문에서 이 칸이 차지하는 범위 [start, end) */
   start: number;
   end: number;
@@ -116,7 +118,7 @@ export function layoutManuscript(source: string, spec: ManuscriptSpec): LayoutRe
   };
 
   const push = (kind: CellKind, text: string, start: number, end: number) => {
-    cells.push({ row, col, text, start, end, kind });
+    cells.push({ row, col, text, appended: "", start, end, kind });
     advance();
   };
 
@@ -151,7 +153,7 @@ export function layoutManuscript(source: string, spec: ManuscriptSpec): LayoutRe
     // 줄 첫 칸에 올 수 없는 문장부호 → 앞 칸에 병기
     if (col === 0 && LEADING_FORBIDDEN.has(head) && cells.length > 0) {
       const previous = cells[cells.length - 1];
-      previous.text += token.text;
+      previous.appended += token.text;
       previous.end = token.end;
       notes.push({ kind: "PUNCT_WRAPPED", offset: token.start });
       continue;

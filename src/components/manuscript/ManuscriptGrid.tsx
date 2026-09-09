@@ -154,9 +154,24 @@ export function ManuscriptGrid({
                       style={{ width: "var(--cell)", height: "var(--cell)" }}
                       title={isTarget && range ? `${range.target}자 지점` : undefined}
                     >
-                      <span className={slot.cell?.text.length === 2 ? "text-[10px] tracking-tighter" : ""}>
-                        {slot.cell?.text ?? ""}
-                      </span>
+                      {slot.cell ? (
+                        <>
+                          <span
+                            className={[
+                              slot.cell.text.length === 2 ? "text-[10px] tracking-tighter" : "",
+                              // 문장부호를 함께 적은 칸은 본 글자를 살짝 왼쪽으로 민다
+                              slot.cell.appended ? "-translate-x-[2px]" : "",
+                            ].join(" ")}
+                          >
+                            {slot.cell.text}
+                          </span>
+                          {slot.cell.appended ? (
+                            <span className="absolute bottom-0 right-[1px] text-[10px] leading-[1.1] text-neutral-800">
+                              {slot.cell.appended}
+                            </span>
+                          ) : null}
+                        </>
+                      ) : null}
                     </button>
                   );
                 })}
