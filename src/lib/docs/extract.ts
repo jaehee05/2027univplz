@@ -4,6 +4,7 @@ import { anthropic } from "@/lib/anthropic/client";
 import { adminBucket } from "@/lib/firebase/admin";
 import { serverEnv } from "@/lib/env";
 import { extractHwpx } from "@/lib/docs/hwpx";
+import { installPdfjsGlobals } from "@/lib/docs/pdfjs-globals";
 import { isClovaConfigured, ocrWithClova } from "@/lib/docs/clova";
 import type { ExtractionMethod } from "@/lib/types/exam";
 
@@ -36,6 +37,7 @@ export interface ExtractedDocument {
 
 /** pdfjs 로 텍스트 레이어를 쪽별로 읽는다. 스캔본이면 거의 빈 문자열이 나온다. */
 async function readWithPdfjs(data: Uint8Array): Promise<string[]> {
+  installPdfjsGlobals();
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   // pdfjs 는 넘겨받은 버퍼를 가져가 버린다(detach). 스캔본이면 그 뒤에 OCR·Claude 로
   // 같은 파일을 다시 보내야 하므로 사본을 넘긴다.

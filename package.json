@@ -15,7 +15,8 @@
     "smoke:full": "tsx scripts/smoke-full.ts",
     "check:hwpx": "tsx scripts/check-hwpx.ts",
     "check:clova": "tsx scripts/check-clova.ts",
-    "check:pdfbuf": "tsx scripts/check-pdf-buffer.ts"
+    "check:pdfbuf": "tsx scripts/check-pdf-buffer.ts",
+    "check:pdfjs": "tsx scripts/check-pdfjs.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
