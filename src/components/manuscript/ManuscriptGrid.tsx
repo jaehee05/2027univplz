@@ -111,10 +111,11 @@ export function ManuscriptGrid({
             <div key={row} className="flex">
               {row === 0 && spec.labelCells > 0 ? (
                 <div
-                  className="flex items-center justify-center border-r border-b border-sky-200 text-[11px] font-medium text-sky-700"
+                  className="flex items-center justify-center border-r border-b border-sky-200 font-medium text-sky-700"
                   style={{
                     width: `calc(var(--cell) * ${spec.labelCells})`,
                     height: "var(--cell)",
+                    fontSize: "calc(var(--cell) * 0.5)",
                   }}
                 >
                   {label ?? ""}
@@ -140,7 +141,7 @@ export function ManuscriptGrid({
                       onCellSelect?.(slot.cell ? slot.cell.start : (layout.cells.at(-1)?.end ?? 0));
                     }}
                     className={[
-                      "relative flex items-center justify-center border-sky-200 text-[13px] leading-none",
+                      "relative flex items-center justify-center border-sky-200 leading-none",
                       isLastCol ? "" : "border-r",
                       row === lastRow ? "" : "border-b",
                       mark === "error"
@@ -153,22 +154,32 @@ export function ManuscriptGrid({
                       isCaret ? "ring-2 ring-inset ring-sky-500" : "",
                       onCellSelect ? "cursor-text" : "cursor-default",
                     ].join(" ")}
-                    style={{ width: "var(--cell)", height: "var(--cell)" }}
+                    style={{
+                      width: "var(--cell)",
+                      height: "var(--cell)",
+                      fontSize: "calc(var(--cell) * 0.62)",
+                    }}
                     title={isTarget && range ? `${range.target}자 지점` : undefined}
                   >
                     {slot.cell ? (
                       <>
                         <span
-                          className={[
-                            slot.cell.text.length === 2 ? "text-[10px] tracking-tighter" : "",
-                            // 문장부호를 함께 적은 칸은 본 글자를 살짝 왼쪽으로 민다
-                            slot.cell.appended ? "-translate-x-[2px]" : "",
-                          ].join(" ")}
+                          // 숫자·영문 두 자는 한 칸에 나란히 들어간다.
+                          // 폭이 좁은 글자라 크기는 거의 그대로 두고 자간만 좁힌다.
+                          className={slot.cell.appended ? "-translate-x-[2px]" : ""}
+                          style={
+                            slot.cell.text.length === 2
+                              ? { fontSize: "calc(var(--cell) * 0.55)", letterSpacing: "-0.04em" }
+                              : undefined
+                          }
                         >
                           {slot.cell.text}
                         </span>
                         {slot.cell.appended ? (
-                          <span className="absolute right-[1px] bottom-0 text-[10px] leading-[1.1] text-neutral-800">
+                          <span
+                            className="absolute right-[1px] bottom-0 leading-[1.1] text-neutral-800"
+                            style={{ fontSize: "calc(var(--cell) * 0.45)" }}
+                          >
                             {slot.cell.appended}
                           </span>
                         ) : null}
