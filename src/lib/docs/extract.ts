@@ -5,6 +5,7 @@ import { adminBucket } from "@/lib/firebase/admin";
 import { serverEnv } from "@/lib/env";
 import { extractHwpx } from "@/lib/docs/hwpx";
 import { installPdfjsGlobals } from "@/lib/docs/pdfjs-globals";
+import { countPdfPages } from "@/lib/docs/page-count";
 import { isClovaConfigured, ocrWithClova } from "@/lib/docs/clova";
 import type { ExtractionMethod } from "@/lib/types/exam";
 
@@ -133,7 +134,9 @@ async function extractPdf(data: Uint8Array, label: string): Promise<ExtractedDoc
 
   if (isClovaConfigured()) {
     try {
-      const pages = await ocrWithClova(data, label);
+      // 뒷부분이 잘려 와도 모르고 넘어가지 않도록 원본 쪽 수를 미리 센다.
+      // 세지 못하면 0 이고, 그때는 검사를 건너뛴다.
+      const pages = await ocrWithClova(data, label, countPdfPages(data) || undefined);
       const total = pages.join("").length;
       if (total > 0) {
         const blank = pages.filter((page) => page.length === 0).length;
