@@ -7,13 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check:manuscript": "tsx scripts/check-layout.ts"
+    "check:manuscript": "tsx scripts/check-layout.ts",
+    "smoke:stage3": "tsx scripts/smoke-stage3.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
     "firebase": "^12.18.0",
     "firebase-admin": "^14.3.0",
     "next": "16.3.4",
+    "pdfjs-dist": "^5.7.284",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1",

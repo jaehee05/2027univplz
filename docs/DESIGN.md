@@ -63,9 +63,11 @@ invites/{code}           role, label, createdBy, createdAt, expiresAt, usedBy?, 
 meta/system              teacherBootstrapped, firstTeacherUid
 
 universities/{univId}    name, slug, order, active, manuscriptSpec
-  exams/{examId}         year, title, questionPdf{storagePath,extraction,…}, solutionPdf{…}
-    questions/{qId}      number, prompt, passages[], charTarget, tolerance, points,
-                         answerFormat, modelAnswer, manuscriptSpecOverride?
+  exams/{examId}         year, title, session, questionPdf{storagePath,extraction{method,pages,chars}},
+                         solutionPdf{…}, questionCount, analysisStatus
+    questions/{qId}      number, prompt, passages[], charTarget, tolerance, lengthNote,
+                         points, answerFormat, modelAnswer, source('parsed'|'manual')
+    extractions/{kind}   text    # 추출 원문. exam 문서 1MB 제한을 피해 따로 둔다
   analyses/{analysisId}  scope('exam'|'aggregate'), questionTypes[], rubric{items[],deductions[]},
                          answerStyle{}, modelAnswerPatterns[], status('draft'|'confirmed'), version
 
@@ -95,14 +97,15 @@ DELETE /api/auth/session            로그아웃
 POST   /api/auth/register           가입 확정 (첫 사용자=teacher, 이후=초대 코드)
 GET    POST /api/invites            초대 코드 목록 · 발급 (teacher)
 
-GET    POST /api/universities            · PATCH DELETE /api/universities/[id]
-POST   /api/exams                        연도 생성
-POST   /api/exams/[id]/upload-url        Storage 업로드용 서명 URL
-POST   /api/exams/[id]/extract           PDF 텍스트 추출 (pdfjs → Claude 폴백)
-POST   /api/exams/[id]/parse-questions   문항 파싱
-POST   /api/exams/[id]/analyze           채점 기준 분석 (SSE)
-POST   /api/universities/[id]/aggregate  연도별 → 대학 통합본
-PATCH  /api/analyses/[id]                수정 · 확정
+GET  POST   /api/universities                       목록 · 추가(기본 6개 넣기 포함)
+PATCH DELETE /api/universities/[univId]              이름 · 활성 · 삭제
+GET  POST   /api/universities/[univId]/exams         연도별 기출 목록 · 생성
+GET PATCH DELETE  …/exams/[examId]                   조회 · PDF 등록 · 삭제
+POST        …/exams/[examId]/extract                 PDF 텍스트 추출 (pdfjs → Claude 폴백)
+POST        …/exams/[examId]/parse-questions         문항 파싱 (저장하지 않고 결과만)
+GET  PUT    …/exams/[examId]/questions               문항 조회 · 통째로 저장
+POST        …/exams/[examId]/analyze                 채점 기준 초안 생성
+GET PATCH   /api/universities/[univId]/analyses/[id] 수정 · 확정 (id = examId)
 
 POST   /api/assignments                  과제 배정
 PUT    /api/answers/[id]                 자동 저장
@@ -145,10 +148,17 @@ PATCH  /api/corrections/[id]             점수·코멘트 수정 · 공개 (tea
 ## 구현 순서
 
 1. **프로젝트 셋업 + Firebase Auth·역할·보안 규칙** ← 완료
-2. 원고지 컴포넌트 + 작성법 검사
-3. PDF 업로드·파싱 + 대학별 채점 기준 분석
+2. 원고지 컴포넌트 + 작성법 검사 ← 완료
+3. PDF 업로드·파싱 + 대학별 채점 기준 분석 ← 완료
 4. 첨삭 API + 결과 화면
 5. 인쇄
 6. 관리 화면 다듬기
 
 기출 PDF가 아직 없으므로 3단계는 더미 기출로 파이프라인을 검증하고, 실제 PDF는 그대로 투입한다.
+
+## 점검 스크립트
+
+| 명령 | 내용 |
+|---|---|
+| `npm run check:manuscript` | 원고지 배치·작성법 규칙 단위 검증 (외부 호출 없음) |
+| `npm run smoke:stage3` | dev 서버를 켠 채 추출 → 문항 파싱 → 채점 기준 분석 → 확정까지 실제로 통과시켜 본다. Claude API 를 실제로 호출한다. |

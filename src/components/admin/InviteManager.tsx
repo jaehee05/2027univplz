@@ -1,23 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-interface Invite {
-  code: string;
-  role: string;
-  label: string | null;
-  usedBy: string | null;
-  createdAt: string | null;
-  expiresAt: string | null;
-}
+import type { InviteRow as Invite } from "@/lib/invites/store";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("ko-KR", { month: "long", day: "numeric" });
 }
 
-export function InviteManager() {
-  const [invites, setInvites] = useState<Invite[]>([]);
+export function InviteManager({ initial }: { initial: Invite[] }) {
+  const [invites, setInvites] = useState<Invite[]>(initial);
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,10 +22,6 @@ export function InviteManager() {
     const data = await response.json();
     setInvites(data.invites ?? []);
   }
-
-  useEffect(() => {
-    void load();
-  }, []);
 
   async function issue() {
     setBusy(true);

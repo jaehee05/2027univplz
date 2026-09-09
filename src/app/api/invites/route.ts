@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { apiTeacher } from "@/lib/auth/dal";
 import { adminDb } from "@/lib/firebase/admin";
+import { listInvites } from "@/lib/invites/store";
 
 // 헷갈리는 글자(0/O, 1/I)를 뺀 코드 문자셋
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -62,27 +63,5 @@ export async function GET() {
   const auth = await apiTeacher();
   if (!auth.ok) return auth.response;
 
-  // where + orderBy 를 함께 쓰면 복합 인덱스가 필요하다.
-  // 한 선생님의 코드는 많아야 수백 개라 정렬은 메모리에서 한다.
-  const snap = await adminDb()
-    .collection("invites")
-    .where("createdBy", "==", auth.user.uid)
-    .limit(200)
-    .get();
-
-  const invites = snap.docs
-    .map((doc) => {
-      const data = doc.data();
-      return {
-        code: doc.id,
-        role: data.role,
-        label: data.label ?? null,
-        usedBy: data.usedBy ?? null,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() ?? null,
-        expiresAt: data.expiresAt?.toDate?.()?.toISOString() ?? null,
-      };
-    })
-    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
-
-  return Response.json({ invites });
+  return Response.json({ invites: await listInvites(auth.user.uid) });
 }
