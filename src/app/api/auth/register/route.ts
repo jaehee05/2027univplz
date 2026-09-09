@@ -108,7 +108,11 @@ export async function POST(request: Request) {
   }
 
   // 보안 규칙에서 바로 쓸 수 있도록 custom claim 에도 역할을 심는다.
-  await adminAuth().setCustomUserClaims(uid, { role });
+  // 이름도 Auth 프로필에 넣어 두면 토큰에 실려 와서, 화면을 그릴 때 Firestore 를 안 읽어도 된다.
+  await Promise.all([
+    adminAuth().setCustomUserClaims(uid, { role }),
+    adminAuth().updateUser(uid, { displayName }),
+  ]);
 
   await createSession(idToken);
 

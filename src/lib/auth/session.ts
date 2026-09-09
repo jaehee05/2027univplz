@@ -31,16 +31,33 @@ export async function destroySession(): Promise<void> {
   jar.delete(SESSION_COOKIE);
 }
 
-/** 쿠키를 검증해 uid 를 돌려준다. 유효하지 않으면 null. */
-export async function verifySession(): Promise<{ uid: string; email?: string } | null> {
+export interface SessionClaims {
+  uid: string;
+  email?: string;
+  name?: string;
+  role?: string;
+}
+
+/**
+ * 쿠키를 검증해 uid 와 claim 을 돌려준다. 유효하지 않으면 null.
+ *
+ * 기본은 서명만 확인한다(로컬 검증, 왕복 없음).
+ * `checkRevoked` 를 켜면 Google 에 한 번 물어 계정 정지 · 강제 로그아웃을 즉시 반영하는데
+ * 왕복이 300ms 넘게 걸려서, 화면을 그릴 때마다 하지 않고 로그인 · 중요한 변경에서만 켠다.
+ */
+export async function verifySession(options?: { checkRevoked?: boolean }): Promise<SessionClaims | null> {
   const jar = await cookies();
   const cookie = jar.get(SESSION_COOKIE)?.value;
   if (!cookie) return null;
 
   try {
-    // checkRevoked=true — 계정 정지 · 강제 로그아웃을 즉시 반영한다.
-    const decoded = await adminAuth().verifySessionCookie(cookie, true);
-    return { uid: decoded.uid, email: decoded.email };
+    const decoded = await adminAuth().verifySessionCookie(cookie, options?.checkRevoked ?? false);
+    return {
+      uid: decoded.uid,
+      email: decoded.email,
+      name: typeof decoded.name === "string" ? decoded.name : undefined,
+      role: typeof decoded.role === "string" ? decoded.role : undefined,
+    };
   } catch {
     return null;
   }

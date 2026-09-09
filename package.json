@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "check:manuscript": "tsx scripts/check-layout.ts",
-    "smoke:stage3": "tsx scripts/smoke-stage3.ts"
+    "smoke:stage3": "tsx scripts/smoke-stage3.ts",
+    "time:pages": "tsx scripts/time-pages.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

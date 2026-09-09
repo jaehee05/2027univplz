@@ -2,7 +2,7 @@ import "server-only";
 
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { getFirestore, initializeFirestore, type Firestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
 import { firebaseClientConfig, serverEnv } from "@/lib/env";
@@ -48,8 +48,19 @@ export function adminAuth(): Auth {
   return getAuth(adminApp());
 }
 
+let db: Firestore | null = null;
+
 export function adminDb(): Firestore {
-  return getFirestore(adminApp());
+  if (db) return db;
+  const app = adminApp();
+  try {
+    // 서버리스에서는 gRPC 연결을 새로 여는 비용이 커서 REST 로 붙는다.
+    db = initializeFirestore(app, { preferRest: true });
+  } catch {
+    // 개발 중 핫 리로드로 이미 초기화된 경우
+    db = getFirestore(app);
+  }
+  return db;
 }
 
 export function adminBucket() {

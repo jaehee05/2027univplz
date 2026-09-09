@@ -15,6 +15,17 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const session = await verifySession();
   if (!session) return null;
 
+  // 역할은 가입 시 custom claim 에 넣어 둔다. 있으면 Firestore 를 읽지 않는다.
+  if (session.role === "teacher" || session.role === "student") {
+    return {
+      uid: session.uid,
+      email: session.email ?? "",
+      displayName: session.name ?? session.email ?? "",
+      role: session.role,
+    };
+  }
+
+  // claim 이 아직 안 붙은 계정만 문서를 본다.
   const snap = await adminDb().collection("users").doc(session.uid).get();
   if (!snap.exists) return null;
 
