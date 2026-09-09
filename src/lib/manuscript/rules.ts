@@ -10,6 +10,7 @@ export type RuleId =
   | "BRACKET_UNBALANCED"
   | "AUTO_PUNCT_WRAPPED"
   | "AUTO_SPACE_DROPPED"
+  | "AUTO_SPACE_AFTER_PUNCT"
   | "AUTO_BRACKET_PUSHED";
 
 export type Severity = "error" | "warning" | "info";
@@ -140,6 +141,7 @@ function collectAutoNotes(layout: LayoutResult): RuleIssue[] {
   const byKind = {
     PUNCT_WRAPPED: 0,
     SPACE_AT_LINE_START: 0,
+    SPACE_AFTER_PUNCT: 0,
     BRACKET_PUSHED: 0,
   };
   for (const note of layout.notes) {
@@ -161,6 +163,15 @@ function collectAutoNotes(layout: LayoutResult): RuleIssue[] {
       rule: "AUTO_SPACE_DROPPED",
       severity: "info",
       message: `줄 첫 칸에 온 띄어쓰기 ${byKind.SPACE_AT_LINE_START}곳은 칸을 쓰지 않았습니다.`,
+      start: 0,
+      end: 0,
+    });
+  }
+  if (byKind.SPACE_AFTER_PUNCT > 0) {
+    issues.push({
+      rule: "AUTO_SPACE_AFTER_PUNCT",
+      severity: "info",
+      message: `마침표·쉼표 뒤 띄어쓰기 ${byKind.SPACE_AFTER_PUNCT}곳은 칸을 쓰지 않았습니다.`,
       start: 0,
       end: 0,
     });

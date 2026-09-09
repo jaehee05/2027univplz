@@ -18,6 +18,7 @@ export interface Cell {
 export type LayoutNoteKind =
   | "PUNCT_WRAPPED"
   | "SPACE_AT_LINE_START"
+  | "SPACE_AFTER_PUNCT"
   | "BRACKET_PUSHED"
   | "INDENT_INSERTED";
 
@@ -42,6 +43,13 @@ const LEADING_FORBIDDEN = new Set([
   ".", ",", "!", "?", ":", ";", "、", "。", "·",
   ")", "]", "}", "”", "’", "」", "』", "〉", "》", ">",
 ]);
+
+/**
+ * 뒤 칸을 비우지 않는 문장부호.
+ * 마침표·쉼표는 한 칸을 차지하고 다음 글자를 바로 이어 쓴다.
+ * 물음표·느낌표는 뒤에 한 칸을 비우므로 여기 넣지 않는다.
+ */
+const NO_SPACE_AFTER = new Set([".", ",", "、", "。", "·"]);
 
 /** 줄 마지막 칸에 올 수 없는 글자 — 다음 줄로 내린다. */
 const TRAILING_FORBIDDEN = new Set([
@@ -97,6 +105,7 @@ function tokenize(source: string): Token[] {
  *  · 문장부호는 줄 첫 칸에 두지 않고 앞 줄 마지막 칸에 함께 표기
  *  · 여는 괄호·따옴표는 줄 마지막 칸에 두지 않고 다음 줄로 내림
  *  · 줄 첫 칸의 띄어쓰기는 칸을 쓰지 않음
+ *  · 마침표·쉼표 뒤의 띄어쓰기는 칸을 쓰지 않음 (물음표·느낌표 뒤는 한 칸 비움)
  *  · 숫자·영문은 한 칸에 두 자
  */
 export function layoutManuscript(source: string, spec: ManuscriptSpec): LayoutResult {
@@ -142,6 +151,12 @@ export function layoutManuscript(source: string, spec: ManuscriptSpec): LayoutRe
     if (token.kind === "space") {
       if (col === 0) {
         notes.push({ kind: "SPACE_AT_LINE_START", offset: token.start });
+        continue;
+      }
+      const previous = cells[cells.length - 1];
+      const tail = previous ? (previous.appended || previous.text).slice(-1) : "";
+      if (previous && NO_SPACE_AFTER.has(tail)) {
+        notes.push({ kind: "SPACE_AFTER_PUNCT", offset: token.start });
         continue;
       }
       push("space", "", token.start, token.end);

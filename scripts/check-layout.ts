@@ -102,5 +102,25 @@ console.log("\n=== 7. 분량 초과 ===");
   check("초과 경고 (상한 660)", over != null && over.severity === "error");
 }
 
+console.log("\n=== 8. 마침표·쉼표 뒤는 칸을 비우지 않는다 ===");
+{
+  const text = "가나, 다라. 마바";
+  const { layout, rows } = render(text);
+  rows.forEach((r) => console.log(r));
+  const spaceCells = layout.cells.filter((c) => c.kind === "space").length;
+  check("쉼표·마침표 뒤 공백 칸 없음", spaceCells === 0, `공백 칸 ${spaceCells}개`);
+  // 들여쓰기1 + 가나,(3) + 다라.(3) + 마바(2) = 9칸
+  check("칸 수 9", layout.countWithSpace === 9, `${layout.countWithSpace}칸`);
+}
+
+console.log("\n=== 9. 물음표·느낌표 뒤는 한 칸 비운다 ===");
+{
+  const text = "그런가? 그렇다";
+  const { layout, rows } = render(text);
+  rows.forEach((r) => console.log(r));
+  const spaceCells = layout.cells.filter((c) => c.kind === "space").length;
+  check("물음표 뒤 공백 칸 유지", spaceCells === 1, `공백 칸 ${spaceCells}개`);
+}
+
 console.log(failures === 0 ? "\n전부 통과" : `\n${failures}건 실패`);
 process.exit(failures === 0 ? 0 : 1);
