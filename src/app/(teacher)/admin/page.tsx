@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { requireTeacher } from "@/lib/auth/dal";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { InviteManager } from "@/components/admin/InviteManager";
@@ -23,6 +25,19 @@ export default async function AdminPage() {
           코드를 발급해 학생에게 전달하면, 학생이 가입 화면에서 입력해 계정을 만듭니다.
         </p>
         <InviteManager />
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">원고지</h2>
+        <p className="mt-1 text-sm text-neutral-500">
+          답안지 규격과 작성법 검사를 확인합니다.
+        </p>
+        <Link
+          href="/admin/manuscript"
+          className="mt-3 inline-block rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium"
+        >
+          원고지 확인 화면 열기
+        </Link>
       </section>
 
       <section className="mt-10 rounded-lg border border-dashed border-neutral-300 p-6 text-sm text-neutral-500">
