@@ -19,8 +19,7 @@ export function countPdfPages(data: Uint8Array): number {
   }
 
   // 2) /Type /Page 개수. /Pages 는 세지 않는다.
-  let byType = 0;
-  for (const _ of raw.matchAll(/\/Type\s*\/Page(?![s])/g)) byType += 1;
+  const byType = [...raw.matchAll(/\/Type\s*\/Page(?![s])/g)].length;
 
   // 둘이 맞으면 믿는다. 어긋나면 판단하지 않는다.
   if (byCount > 0 && byType > 0) return byCount === byType ? byCount : 0;

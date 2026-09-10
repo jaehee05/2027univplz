@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { ASSIGNMENT_LABEL, type Assignment } from "@/lib/types/work";
+import { ASSIGNMENT_LABEL, type Assignment, type Correction } from "@/lib/types/work";
 
 const STATUS_CLASS: Record<Assignment["status"], string> = {
   assigned: "bg-neutral-100 text-neutral-600",
@@ -32,6 +32,26 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
   });
   const waiting = rows.filter((row) => row.status === "submitted").length;
 
+  /** 첨삭은 몇 분 걸린다. 서버가 끝낼 때까지 상태를 물어 본다. */
+  async function waitFor(correctionId: string): Promise<Correction> {
+    const deadline = Date.now() + 12 * 60 * 1000;
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      const response = await fetch(`/api/corrections/${correctionId}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "상태를 확인하지 못했습니다.");
+
+      const correction: Correction = data.correction;
+      if (correction.status === "done") return correction;
+      if (correction.status === "error") {
+        throw new Error(correction.error ?? "첨삭에 실패했습니다.");
+      }
+      if (Date.now() > deadline) {
+        throw new Error("시간이 너무 오래 걸립니다. 잠시 뒤 새로고침해서 확인해 주세요.");
+      }
+    }
+  }
+
   async function correct(assignment: Assignment) {
     setRunning(assignment.id);
     setError(null);
@@ -44,10 +64,11 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "첨삭에 실패했습니다.");
 
+      const correction = await waitFor(data.correction.id);
       setRows((prev) =>
         prev.map((row) =>
           row.id === assignment.id
-            ? { ...row, status: "corrected", correctionId: data.correction.id }
+            ? { ...row, status: "corrected", correctionId: correction.id }
             : row,
         ),
       );

@@ -218,11 +218,20 @@ async function main() {
     console.log(`  ${ANSWER.length}자 제출`);
 
     step("첨삭");
-    const corrected = await api("/api/corrections", {
+    const started = await api("/api/corrections", {
       method: "POST",
       body: JSON.stringify({ assignmentId: assignment.id }),
     });
-    const correction = corrected.correction;
+    // 첨삭은 응답을 보낸 뒤에 이어서 돌아간다. 끝날 때까지 상태를 물어 본다.
+    const beganAt = Date.now();
+    let correction = started.correction;
+    while (correction.status === "queued" || correction.status === "running") {
+      if (Date.now() - beganAt > 12 * 60 * 1000) throw new Error("첨삭이 12분 안에 안 끝났습니다.");
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      correction = (await api(`/api/corrections/${started.correction.id}`)).correction;
+    }
+    if (correction.status !== "done") throw new Error(`첨삭 실패: ${correction.error}`);
+    console.log(`  ${Math.round((Date.now() - beganAt) / 1000)}초 걸림`);
     const total = correction.scores.items.reduce(
       (sum: number, item: { awarded: number }) => sum + item.awarded,
       0,

@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 
@@ -21,11 +22,17 @@ import {
   toCorrection,
 } from "@/lib/work/store";
 
-export const maxDuration = 600;
+export const maxDuration = 800;
 
 const bodySchema = z.object({ assignmentId: z.string().min(1) });
 
-/** 첨삭 실행. 확정된 채점 기준이 있어야 한다. */
+/**
+ * 첨삭 실행. 확정된 채점 기준이 있어야 한다.
+ *
+ * 첨삭은 몇 분씩 걸려서 응답을 붙잡고 있으면 게이트웨이가 먼저 연결을 끊는다.
+ * 그래서 문서를 running 으로 만들어 바로 응답하고, 실제 작업은 응답 뒤에 이어서 한다.
+ * 화면은 GET /api/corrections/[id] 로 상태를 물어 본다.
+ */
 export async function POST(request: Request) {
   const auth = await apiTeacher();
   if (!auth.ok) return auth.response;
@@ -89,33 +96,41 @@ export async function POST(request: Request) {
   );
   await assignmentRef(assignment.id).update({ status: "correcting", correctionId: ref.id });
 
-  try {
-    const result = await correctAnswer({
-      university: toUniversity(univSnap).name,
-      examTitle: assignment.examTitle,
-      question: toQuestion(questionSnap),
-      analysis: toAnalysis(analysisSnap, assignment.univId),
-      answer: answer.text,
-      charCount: answer.charCount,
-      charCountNoSpace: answer.charCountNoSpace,
-    });
+  const input = {
+    university: toUniversity(univSnap).name,
+    examTitle: assignment.examTitle,
+    question: toQuestion(questionSnap),
+    analysis: toAnalysis(analysisSnap, assignment.univId),
+    answer: answer.text,
+    charCount: answer.charCount,
+    charCountNoSpace: answer.charCountNoSpace,
+  };
 
-    await ref.update({
-      status: "done",
-      scores: result.scores,
-      inlineComments: result.inlineComments,
-      overall: result.overall,
-      revisedExample: result.revisedExample,
-      usage: result.usage,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    await assignmentRef(assignment.id).update({ status: "corrected" });
+  // 응답을 보낸 뒤에 이어서 돌린다. 결과는 Firestore 에 쓴다.
+  after(async () => {
+    try {
+      const result = await correctAnswer(input);
 
-    return Response.json({ correction: toCorrection(await ref.get()) });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "첨삭에 실패했습니다.";
-    await ref.update({ status: "error", error: message, updatedAt: FieldValue.serverTimestamp() });
-    await assignmentRef(assignment.id).update({ status: "submitted" });
-    return Response.json({ error: message }, { status: 502 });
-  }
+      await ref.update({
+        status: "done",
+        scores: result.scores,
+        inlineComments: result.inlineComments,
+        overall: result.overall,
+        revisedExample: result.revisedExample,
+        usage: result.usage,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      await assignmentRef(assignment.id).update({ status: "corrected" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "첨삭에 실패했습니다.";
+      await ref.update({
+        status: "error",
+        error: message,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      await assignmentRef(assignment.id).update({ status: "submitted" });
+    }
+  });
+
+  return Response.json({ correction: toCorrection(await ref.get()) });
 }
