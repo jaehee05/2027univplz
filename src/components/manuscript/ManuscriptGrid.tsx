@@ -77,6 +77,11 @@ export function ManuscriptGrid({
   const range = lengthRule ? lengthRange(lengthRule) : null;
   // 번호 배지는 칸 크기를 따라간다 — 칸이 작아도 읽히고, 커도 글자를 덮지 않는다.
   const badge = Math.max(11, Math.min(15, Math.round(cellSize * 0.62)));
+  /**
+   * 배지는 칸 왼쪽 위로 조금 튀어나온다. 첫 줄·첫 칸에서는 격자 밖으로 나가
+   * 잘려 보이므로, 튀어나오는 만큼 바깥에 자리를 만들어 둔다.
+   */
+  const overhang = Math.ceil(badge / 3) + 1;
 
   const filled = useMemo(() => {
     const map = new Map<string, Cell>();
@@ -164,7 +169,15 @@ export function ManuscriptGrid({
 
   return (
     <div className="overflow-x-auto">
-      <div className="inline-flex items-start" style={{ ["--cell" as string]: `${cellSize}px` }}>
+      <div
+        className="inline-flex items-start"
+        style={{
+          ["--cell" as string]: `${cellSize}px`,
+          // 왼쪽 위로 튀어나오는 번호 배지가 잘리지 않게 자리를 둔다.
+          paddingTop: `${overhang}px`,
+          paddingLeft: `${overhang}px`,
+        }}
+      >
         {/* 바깥 테두리는 여기 한 번만 두르고, 안쪽 격자선은 모두 같은 굵기·색으로 그린다 */}
         <div className="border border-sky-400 bg-white">
           {grid.map((line, row) => (
