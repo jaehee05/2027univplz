@@ -1,0 +1,109 @@
+"use client";
+
+import { useState } from "react";
+
+import type { Passage } from "@/lib/types/exam";
+
+interface Props {
+  assignmentId: string;
+  prompt: string;
+  passages: Passage[];
+  /** 문제지 PDF 가 있는지 — 없으면 글로만 보여 준다 */
+  hasPdf: boolean;
+  /** 한 PDF 안에서 이 시험이 차지하는 쪽 */
+  pageFrom: number | null;
+  pageTo: number | null;
+}
+
+/** 왼쪽 문제지 칸. 올려 둔 PDF 를 그대로 띄우고, 필요하면 글로 바꿔 본다. */
+export function PaperPane({ assignmentId, prompt, passages, hasPdf, pageFrom, pageTo }: Props) {
+  const [mode, setMode] = useState<"pdf" | "text">(hasPdf ? "pdf" : "text");
+
+  // 브라우저 PDF 뷰어는 #page 로 시작 쪽을 잡을 수 있다.
+  const src =
+    `/api/assignments/${assignmentId}/paper` + (pageFrom && pageFrom > 1 ? `#page=${pageFrom}` : "");
+
+  return (
+    <section className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center justify-between gap-2 pb-2">
+        <h2 className="text-sm font-semibold text-neutral-500">문제지</h2>
+        <div className="flex items-center gap-2">
+          {pageFrom || pageTo ? (
+            <span className="text-xs text-neutral-400">
+              {pageFrom ?? "처음"}~{pageTo ?? "끝"}쪽
+            </span>
+          ) : null}
+          {hasPdf ? (
+            <div className="flex rounded-md border border-neutral-300 text-xs">
+              {(["pdf", "text"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setMode(value)}
+                  className={[
+                    "px-2 py-1",
+                    mode === value ? "bg-neutral-900 text-white" : "text-neutral-600",
+                    value === "pdf" ? "rounded-l-md" : "rounded-r-md",
+                  ].join(" ")}
+                >
+                  {value === "pdf" ? "원본" : "글자"}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <a
+            href={src}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-neutral-300 px-2 py-1 text-xs"
+          >
+            새 창
+          </a>
+        </div>
+      </div>
+
+      {mode === "pdf" && hasPdf ? (
+        <object
+          data={src}
+          type="application/pdf"
+          className="min-h-0 w-full flex-1 rounded-md border border-neutral-200 bg-neutral-50"
+        >
+          {/* 브라우저가 PDF 를 못 열 때 */}
+          <div className="p-4 text-sm text-neutral-600">
+            이 브라우저에서는 PDF 를 바로 열 수 없습니다.{" "}
+            <a href={src} target="_blank" rel="noreferrer" className="underline">
+              새 창에서 열기
+            </a>
+            <button
+              type="button"
+              onClick={() => setMode("text")}
+              className="ml-2 underline underline-offset-2"
+            >
+              글자로 보기
+            </button>
+          </div>
+        </object>
+      ) : (
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto rounded-md border border-neutral-200 p-4">
+          <div>
+            <h3 className="text-sm font-semibold text-neutral-500">논제</h3>
+            <p className="mt-1 leading-7 whitespace-pre-wrap">{prompt}</p>
+          </div>
+
+          {passages.map((passage) => (
+            <div key={passage.label}>
+              <h3 className="text-sm font-semibold text-neutral-500">제시문 {passage.label}</h3>
+              <p className="mt-1 leading-7 whitespace-pre-wrap">{passage.text}</p>
+            </div>
+          ))}
+
+          {!hasPdf && passages.length === 0 ? (
+            <p className="text-sm text-neutral-500">
+              올려 둔 문제지가 없습니다. 논제만 보고 쓰시면 됩니다.
+            </p>
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
+}

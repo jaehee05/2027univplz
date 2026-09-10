@@ -4,7 +4,8 @@ import { FieldValue } from "firebase-admin/firestore";
 
 import { requireUser } from "@/lib/auth/dal";
 import { AnswerWriter } from "@/components/manuscript/AnswerWriter";
-import { questions, toQuestion } from "@/lib/exam/store";
+import { PaperPane } from "@/components/manuscript/PaperPane";
+import { examRef, questions, toExam, toQuestion } from "@/lib/exam/store";
 import { answers, assignmentRef, toAnswer, toAssignment } from "@/lib/work/store";
 
 export default async function WritePage({ params }: PageProps<"/write/[assignmentId]">) {
@@ -39,55 +40,56 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
     answer = toAnswer(await ref.get());
   }
 
-  // 제시문은 과제에 복사해 두지 않으므로 기출에서 읽는다.
-  const questionSnap = await questions(assignment.univId, assignment.examId)
-    .doc(assignment.questionId)
-    .get();
+  // 제시문과 원본 문제지는 기출 쪽에 있다.
+  const [questionSnap, examSnap] = await Promise.all([
+    questions(assignment.univId, assignment.examId).doc(assignment.questionId).get(),
+    examRef(assignment.univId, assignment.examId).get(),
+  ]);
   const question = questionSnap.exists ? toQuestion(questionSnap) : null;
+  const exam = examSnap.exists ? toExam(examSnap, assignment.univId) : null;
+  const paper = exam?.questionPdf ?? null;
+  const hasPdf = Boolean(paper && paper.fileName.toLowerCase().endsWith(".pdf"));
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-8">
-      <Link
-        href="/dashboard"
-        className="text-sm text-neutral-500 underline-offset-4 hover:underline"
-      >
-        ← 내 과제
-      </Link>
+    <main className="mx-auto flex h-dvh w-full max-w-[1800px] flex-col px-5 py-4">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-neutral-200 pb-3">
+        <div className="flex flex-wrap items-baseline gap-x-3">
+          <Link
+            href="/dashboard"
+            className="text-sm text-neutral-500 underline-offset-4 hover:underline"
+          >
+            ← 내 과제
+          </Link>
+          <h1 className="text-lg font-bold">
+            {assignment.questionNumber}번
+            {assignment.charTarget ? ` · ${assignment.charTarget}자 내외` : ""}
+          </h1>
+          <p className="text-sm text-neutral-500">
+            {assignment.univName} · {assignment.examTitle}
+          </p>
+        </div>
 
-      <header className="mt-3 border-b border-neutral-200 pb-4">
-        <p className="text-sm text-neutral-500">
-          {assignment.univName} · {assignment.examTitle}
-        </p>
-        <h1 className="mt-1 text-xl font-bold">
-          {assignment.questionNumber}번
-          {assignment.charTarget ? ` · ${assignment.charTarget}자 내외` : ""}
-        </h1>
+        <Link
+          href={`/print/exam/${assignment.id}`}
+          target="_blank"
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+        >
+          문제지 · 답안지 인쇄
+        </Link>
       </header>
 
-      <div className="mt-6 grid gap-8 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
-        <aside className="space-y-5 xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:self-start xl:overflow-y-auto">
-          <section>
-            <h2 className="text-sm font-semibold text-neutral-500">논제</h2>
-            <p className="mt-1 leading-7 whitespace-pre-wrap">{assignment.questionPrompt}</p>
-          </section>
+      {/* 왼쪽 문제지, 오른쪽 원고지. 원고지는 38칸이 들어갈 만큼만 차지한다. */}
+      <div className="grid min-h-0 flex-1 gap-5 pt-4 xl:grid-cols-[minmax(360px,1fr)_auto]">
+        <PaperPane
+          assignmentId={assignment.id}
+          prompt={assignment.questionPrompt}
+          passages={question?.passages ?? []}
+          hasPdf={hasPdf}
+          pageFrom={paper?.pageFrom ?? null}
+          pageTo={paper?.pageTo ?? null}
+        />
 
-          {question?.passages.map((passage) => (
-            <section key={passage.label}>
-              <h2 className="text-sm font-semibold text-neutral-500">제시문 {passage.label}</h2>
-              <p className="mt-1 leading-7 whitespace-pre-wrap">{passage.text}</p>
-            </section>
-          ))}
-
-          <Link
-            href={`/print/exam/${assignment.id}`}
-            target="_blank"
-            className="inline-block rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          >
-            문제지 인쇄
-          </Link>
-        </aside>
-
-        <div className="min-w-0">
+        <div className="min-h-0 overflow-y-auto xl:pr-1">
           <AnswerWriter assignment={assignment} initial={answer} />
         </div>
       </div>
