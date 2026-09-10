@@ -44,6 +44,8 @@ export interface Assignment {
   charTarget: number | null;
   tolerance: number;
   assignedBy: string;
+  /** 선생님이 자기에게 낸 연습 과제인지 */
+  selfPractice: boolean;
   dueAt: string | null;
   status: AssignmentStatus;
   answerId: string | null;

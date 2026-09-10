@@ -30,7 +30,10 @@ export function PaperPane({
   const [mode, setMode] = useState<"pdf" | "text">(hasPdf ? "pdf" : "text");
 
   // 서버가 배정된 쪽만 잘라서 내보내므로 여기서는 통째로 열면 된다.
-  const src = `/api/assignments/${assignmentId}/paper?v=${encodeURIComponent(version)}`;
+  // view=FitH — 브라우저 PDF 뷰어를 너비 맞춤으로 열어 준다(칸이 좁아도 글자가 읽힌다).
+  const src = `/api/assignments/${assignmentId}/paper?v=${encodeURIComponent(version)}#view=FitH`;
+  // 새 창은 보통 넓으니 그대로 연다.
+  const popout = `/api/assignments/${assignmentId}/paper?v=${encodeURIComponent(version)}`;
 
   return (
     <section className="flex h-full min-h-0 flex-col">
@@ -64,7 +67,7 @@ export function PaperPane({
             </div>
           ) : null}
           <a
-            href={src}
+            href={popout}
             target="_blank"
             rel="noreferrer"
             className="rounded-md border border-neutral-300 px-2 py-1 text-xs"
@@ -83,7 +86,7 @@ export function PaperPane({
           {/* 브라우저가 PDF 를 못 열 때 */}
           <div className="p-4 text-sm text-neutral-600">
             이 브라우저에서는 PDF 를 바로 열 수 없습니다.{" "}
-            <a href={src} target="_blank" rel="noreferrer" className="underline">
+            <a href={popout} target="_blank" rel="noreferrer" className="underline">
               새 창에서 열기
             </a>
             <button

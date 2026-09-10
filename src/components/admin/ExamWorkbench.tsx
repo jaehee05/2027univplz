@@ -14,9 +14,16 @@ interface Props {
   questions: Question[];
   analysis: Analysis | null;
   students: StudentRow[];
+  teacherUid: string;
 }
 
-export function ExamWorkbench({ exam: initialExam, questions, analysis, students }: Props) {
+export function ExamWorkbench({
+  exam: initialExam,
+  questions,
+  analysis,
+  students,
+  teacherUid,
+}: Props) {
   const [exam, setExam] = useState(initialExam);
   const [saved, setSaved] = useState(questions);
   const [confirmed, setConfirmed] = useState(analysis?.status === "confirmed");
@@ -66,6 +73,7 @@ export function ExamWorkbench({ exam: initialExam, questions, analysis, students
         questions={saved}
         students={students}
         analysisConfirmed={confirmed}
+        teacherUid={teacherUid}
       />
     </div>
   );

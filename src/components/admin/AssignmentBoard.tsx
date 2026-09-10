@@ -21,16 +21,18 @@ function formatDate(iso: string | null): string {
 
 export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
   const [rows, setRows] = useState<Assignment[]>(initial);
-  const [filter, setFilter] = useState<"all" | "todo" | "done">("all");
+  const [filter, setFilter] = useState<"all" | "todo" | "done" | "mine">("all");
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const shown = rows.filter((row) => {
     if (filter === "todo") return row.status === "submitted";
     if (filter === "done") return row.status === "corrected" || row.status === "published";
+    if (filter === "mine") return row.selfPractice;
     return true;
   });
   const waiting = rows.filter((row) => row.status === "submitted").length;
+  const mine = rows.filter((row) => row.selfPractice).length;
 
   /** 첨삭은 몇 분 걸린다. 서버가 끝낼 때까지 상태를 물어 본다. */
   async function waitFor(correctionId: string): Promise<Correction> {
@@ -82,13 +84,10 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
   }
 
   async function revoke(assignment: Assignment) {
-    if (
-      !confirm(
-        `${assignment.studentName} 의 과제를 회수할까요? 학생이 쓴 답안과 첨삭 결과가 함께 지워집니다.`,
-      )
-    ) {
-      return;
-    }
+    const message = assignment.selfPractice
+      ? "내 연습 과제를 지울까요? 쓴 답안과 첨삭 결과가 함께 지워집니다."
+      : `${assignment.studentName} 의 과제를 회수할까요? 학생이 쓴 답안과 첨삭 결과가 함께 지워집니다.`;
+    if (!confirm(message)) return;
     const response = await fetch(`/api/assignments/${assignment.id}`, { method: "DELETE" });
     const data = await response.json();
     if (!response.ok) {
@@ -114,6 +113,7 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
             ["all", `전체 ${rows.length}`],
             ["todo", `첨삭 대기 ${waiting}`],
             ["done", "첨삭 완료"],
+            ...(mine > 0 ? ([["mine", `내가 푼 것 ${mine}`]] as const) : []),
           ] as const
         ).map(([key, label]) => (
           <button
@@ -135,7 +135,9 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
           <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-medium">{row.studentName}</span>
+                <span className="font-medium">
+                  {row.selfPractice ? "나 (연습)" : row.studentName}
+                </span>
                 <span className={`rounded px-1.5 py-0.5 text-xs ${STATUS_CLASS[row.status]}`}>
                   {ASSIGNMENT_LABEL[row.status]}
                 </span>
@@ -150,6 +152,16 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
             </div>
 
             <div className="flex shrink-0 items-center gap-2 text-sm">
+              {/* 내가 낸 연습 과제는 여기서 바로 쓴다. */}
+              {row.selfPractice && row.status !== "submitted" && row.status !== "correcting" ? (
+                <Link
+                  href={`/write/${row.id}`}
+                  className="rounded-md border border-neutral-300 px-3 py-1.5"
+                >
+                  {row.status === "assigned" ? "풀기" : "이어 쓰기"}
+                </Link>
+              ) : null}
+
               {row.status === "submitted" ? (
                 <button
                   type="button"
@@ -186,7 +198,7 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
                 onClick={() => void revoke(row)}
                 className="rounded-md border border-red-200 px-3 py-1.5 text-red-600"
               >
-                회수
+                {row.selfPractice ? "지우기" : "회수"}
               </button>
             </div>
           </li>

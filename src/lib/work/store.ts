@@ -35,6 +35,7 @@ export function toAssignment(snap: DocumentSnapshot): Assignment {
     charTarget: data.charTarget ?? null,
     tolerance: data.tolerance ?? 0.1,
     assignedBy: data.assignedBy,
+    selfPractice: data.studentId === data.assignedBy,
     dueAt: toIso(data.dueAt),
     status: data.status ?? "assigned",
     answerId: data.answerId ?? null,

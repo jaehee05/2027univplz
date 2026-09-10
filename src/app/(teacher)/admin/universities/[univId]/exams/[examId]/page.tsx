@@ -46,6 +46,7 @@ export default async function ExamPage({
         questions={questions}
         analysis={analysisSnap.exists ? toAnalysis(analysisSnap, univId) : null}
         students={students}
+        teacherUid={user.uid}
       />
     </main>
   );

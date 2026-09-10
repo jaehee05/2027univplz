@@ -49,10 +49,12 @@ export async function POST(request: Request) {
   const exam = toExam(examSnap, univId);
   const question = toQuestion(questionSnap);
 
-  // 내 학생인지 확인한다.
+  // 내 학생인지 확인한다. 선생님 자신은 연습용으로 낼 수 있다.
   const studentDocs = await Promise.all(studentIds.map((uid) => users().doc(uid).get()));
   const invalid = studentDocs.find(
-    (snap) => !snap.exists || snap.data()?.teacherId !== auth.user.uid,
+    (snap) =>
+      !snap.exists ||
+      (snap.id !== auth.user.uid && snap.data()?.teacherId !== auth.user.uid),
   );
   if (invalid) {
     return Response.json({ error: "내 학생이 아닌 계정이 있습니다." }, { status: 403 });

@@ -55,10 +55,10 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-neutral-200 pb-3">
         <div className="flex flex-wrap items-baseline gap-x-3">
           <Link
-            href="/dashboard"
+            href={assignment.selfPractice ? "/admin/assignments" : "/dashboard"}
             className="text-sm text-neutral-500 underline-offset-4 hover:underline"
           >
-            ← 내 과제
+            ← {assignment.selfPractice ? "과제 · 첨삭" : "내 과제"}
           </Link>
           <h1 className="text-lg font-bold">
             {assignment.questionNumber}번
