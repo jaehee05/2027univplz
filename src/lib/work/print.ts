@@ -85,6 +85,11 @@ export async function loadForPrint(input: {
 
 export function lengthRuleOf(assignment: Assignment) {
   return assignment.charTarget
-    ? { target: assignment.charTarget, tolerance: assignment.tolerance }
+    ? {
+        target: assignment.charTarget,
+        tolerance: assignment.tolerance,
+        min: assignment.charMin,
+        max: assignment.charMax,
+      }
     : null;
 }

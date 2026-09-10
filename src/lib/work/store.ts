@@ -34,6 +34,8 @@ export function toAssignment(snap: DocumentSnapshot): Assignment {
     questionPrompt: data.questionPrompt ?? "",
     charTarget: data.charTarget ?? null,
     tolerance: data.tolerance ?? 0.1,
+    charMin: data.charMin ?? null,
+    charMax: data.charMax ?? null,
     assignedBy: data.assignedBy,
     selfPractice: data.studentId === data.assignedBy,
     dueAt: toIso(data.dueAt),

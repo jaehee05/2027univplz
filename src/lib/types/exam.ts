@@ -29,7 +29,7 @@ export interface PdfFile {
   extraction: Extraction | null;
 }
 
-export type ExtractionMethod = "pdfjs" | "claude" | "hwpx" | "clova";
+export type ExtractionMethod = "pdfjs" | "hwpx" | "clova";
 
 export interface Extraction {
   /** pdfjs 로 뽑았는지, 스캔본이라 Claude 에 그림째 넘겼는지 */
@@ -70,6 +70,12 @@ export interface Question {
   charTarget: number | null;
   /** 허용 오차 비율. 0.1 이면 ±10% */
   tolerance: number;
+  /**
+   * 문제지가 범위를 못 박은 경우의 하한 · 상한. ("(800±100자)", "500자 이상 600자 이하")
+   * 있으면 tolerance 대신 이 값을 쓴다 — 비율로 환산하면 문제지와 다른 수가 나온다.
+   */
+  charMin: number | null;
+  charMax: number | null;
   /** 원문에 적힌 분량 조건 문구 그대로 */
   lengthNote: string | null;
   points: number | null;

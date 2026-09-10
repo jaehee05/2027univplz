@@ -43,6 +43,9 @@ export interface Assignment {
   questionPrompt: string;
   charTarget: number | null;
   tolerance: number;
+  /** 문제지가 범위를 못 박은 경우. 없으면 tolerance 로 계산한다. */
+  charMin: number | null;
+  charMax: number | null;
   assignedBy: string;
   /** 선생님이 자기에게 낸 연습 과제인지 */
   selfPractice: boolean;

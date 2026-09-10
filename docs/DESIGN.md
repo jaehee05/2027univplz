@@ -14,8 +14,8 @@ Claude API로 첨삭하는 서비스. 문제지·답안지·첨삭 결과는 모
 | 인증 | Firebase Auth (이메일/비밀번호 + Google) → 서버는 httpOnly 세션 쿠키 |
 | DB | Firestore |
 | 파일 | Firebase Storage (기출·해설 PDF) |
-| LLM | Claude API — 첨삭·분석 `claude-opus-5`, 파일 분류·텍스트화 `claude-haiku-4-5` (환경변수 교체 가능) |
-| PDF 글자 | 네이버 CLOVA OCR — 텍스트 PDF·스캔본을 가리지 않고 한 번에 읽는다. 없거나 실패하면 pdfjs → Claude |
+| LLM | Claude API — 첨삭·분석 `claude-opus-5`, 파일 분류 `claude-haiku-4-5` (환경변수 교체 가능) |
+| PDF 글자 | 네이버 CLOVA OCR — 텍스트 PDF·스캔본을 가리지 않고 한 번에 읽는다. **Claude 는 쓰지 않는다.** 없거나 실패하면 pdfjs 로 내려가고, 스캔본이면 실패시킨다 |
 | 한글(HWPX) | zip 안 OWPML 을 직접 읽는다. 외부 호출 없음 |
 
 > CLOVA 는 **API Gateway 연동 후의 공개 Invoke URL**(`https://<id>.apigw.ntruss.com/custom/v1/...`)이
@@ -179,7 +179,6 @@ Claude 구독을 이미 쓰고 있으면 **API 요금 없이** 같은 일을 할
 | 용도 | 입력 | 출력 |
 |---|---|---|
 | 파일 분류 | 쪽별 앞부분 요약 + 등록된 대학 목록 | 대학 · 연도 · (계열 · 종류 · 쪽 범위)[] |
-| PDF 텍스트화 | `document`(base64 PDF) — CLOVA OCR 이 없거나 실패했을 때만 | 텍스트 |
 | 문항 파싱 | 문제 PDF 텍스트 | 문항 배열 |
 | 채점 기준 분석 | 문제 + 해설 텍스트 | `question_types` / `rubric` / `answer_style` / `model_answer_patterns` |
 | 첨삭 | 답안 + 논제 + 제시문 + 확정 rubric + 모범답안 | `scores` / `inline_comments` / `overall` / `revised_example` |

@@ -90,6 +90,8 @@ export async function POST(request: Request) {
       questionPrompt: question.prompt,
       charTarget: question.charTarget,
       tolerance: question.tolerance,
+      charMin: question.charMin,
+      charMax: question.charMax,
       assignedBy: auth.user.uid,
       dueAt: dueAt ? Timestamp.fromDate(new Date(`${dueAt}T23:59:59+09:00`)) : null,
       status: "assigned",

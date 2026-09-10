@@ -70,7 +70,12 @@ function renderPassages(question: Question): string {
 
 function renderLength(question: Question): string {
   if (!question.charTarget) return question.lengthNote ?? "분량 조건 없음";
-  const range = lengthRange({ target: question.charTarget, tolerance: question.tolerance });
+  const range = lengthRange({
+    target: question.charTarget,
+    tolerance: question.tolerance,
+    min: question.charMin,
+    max: question.charMax,
+  });
   return `${question.lengthNote ?? `${question.charTarget}자 내외`} → 허용 ${range.min}~${range.max}자`;
 }
 

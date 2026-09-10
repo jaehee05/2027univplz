@@ -242,13 +242,9 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
               <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700">
                 한글 문서
               </span>
-            ) : extraction.method === "clova" ? (
-              <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700">
-                스캔본 → CLOVA OCR
-              </span>
             ) : (
               <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700">
-                스캔본 → Claude
+                CLOVA OCR
               </span>
             )}
           </dd>

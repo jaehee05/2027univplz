@@ -34,10 +34,6 @@ export const serverEnv = {
   get correctionModel(): string {
     return process.env.ANTHROPIC_MODEL_CORRECTION ?? "claude-opus-5";
   },
-  /** PDF 텍스트화 등 단순 추출 작업 */
-  get extractionModel(): string {
-    return process.env.ANTHROPIC_MODEL_EXTRACTION ?? "claude-haiku-4-5";
-  },
   /**
    * 첨삭에서 생각에 얼마나 힘을 쓸지. 출력 토큰이 여기서 크게 갈린다.
    * 비워 두면 모델이 알아서 정한다.

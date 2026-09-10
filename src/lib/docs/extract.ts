@@ -1,8 +1,6 @@
 import "server-only";
 
-import { anthropic } from "@/lib/anthropic/client";
 import { adminBucket } from "@/lib/firebase/admin";
-import { serverEnv } from "@/lib/env";
 import { extractHwpx } from "@/lib/docs/hwpx";
 import { installPdfjsGlobals } from "@/lib/docs/pdfjs-globals";
 import { countPdfPages } from "@/lib/docs/page-count";
@@ -23,10 +21,6 @@ export function isHwpx(fileName: string): boolean {
 
 /** 이 값보다 페이지당 글자가 적으면 스캔본으로 보고 Claude 에 넘긴다. */
 const CHARS_PER_PAGE_THRESHOLD = 60;
-
-/** Claude document 블록 제한 (100페이지 / 32MB) 안쪽으로만 보낸다. */
-const CLAUDE_MAX_PAGES = 100;
-const CLAUDE_MAX_BYTES = 30 * 1024 * 1024;
 
 export interface ExtractedDocument {
   method: ExtractionMethod;
@@ -70,64 +64,13 @@ async function readWithPdfjs(data: Uint8Array): Promise<string[]> {
   return pages;
 }
 
-/** 쪽 경계 표시를 넣어 옮겨 적게 하고, 그 표시로 다시 쪼갠다. */
-const PAGE_MARK = /\[\[\s*(?:page|쪽)\s*\d+\s*\]\]/gi;
-
-async function readWithClaude(data: Uint8Array, hint: string): Promise<string[]> {
-  if (data.byteLength > CLAUDE_MAX_BYTES) {
-    throw new Error(
-      `PDF 가 ${Math.round(data.byteLength / 1024 / 1024)}MB 로 너무 큽니다. 30MB 이하로 나눠 올려 주세요.`,
-    );
-  }
-
-  const base64 = Buffer.from(data).toString("base64");
-
-  const stream = anthropic().messages.stream({
-    model: serverEnv.extractionModel,
-    max_tokens: 32000,
-    system:
-      "너는 한국 대학 논술 시험지를 글자로 옮기는 사람이다. " +
-      "보이는 내용을 빠짐없이, 원래 순서와 줄바꿈을 지켜 그대로 옮겨 적어라. " +
-      "요약하거나 해설을 덧붙이지 말고, 표는 줄글로 풀어서 적는다. " +
-      "제시문 기호(가·나·다, [가], (A) 등)와 문항 번호는 반드시 그대로 남긴다. " +
-      "각 쪽이 시작될 때마다 그 줄에 [[page 1]], [[page 2]] 처럼 쪽 번호만 적은 줄을 넣어라.",
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "document",
-            source: { type: "base64", media_type: "application/pdf", data: base64 },
-            title: hint,
-          },
-          { type: "text", text: "이 PDF 의 모든 글자를 쪽 표시와 함께 그대로 옮겨 적어 줘." },
-        ],
-      },
-    ],
-  });
-
-  const message = await stream.finalMessage();
-  const text = message.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
-    .join("");
-
-  const parts = text.split(PAGE_MARK).map((part) => part.trim());
-  // 첫 조각은 [[page 1]] 앞의 빈 부분이라 비어 있으면 버린다.
-  if (parts.length > 1 && !parts[0]) parts.shift();
-  return parts.length ? parts : [text.trim()];
-}
-
-/**
- * PDF 를 쪽별 텍스트로 만든다.
- * 텍스트 레이어가 있으면 그대로 쓰고, 거의 없으면 Claude 로 넘긴다.
- */
 /**
  * PDF 에서 글자를 뽑는다.
  *
- * CLOVA OCR 이 설정돼 있으면 먼저 쓴다. 텍스트 PDF 든 스캔본이든 한 번에 처리하고
- * 한국어 정확도가 좋다. 서버리스에서 pdfjs 가 깨지는 일이 잦아 그쪽에 기대지 않는다.
- * CLOVA 가 없거나 실패하면 pdfjs → (글자가 거의 없으면) Claude 순으로 내려간다.
+ * CLOVA OCR 을 먼저 쓴다. 텍스트 PDF 든 스캔본이든 한 번에 처리하고 한국어 정확도가 좋다.
+ * CLOVA 가 없거나 실패하면 pdfjs 로 내려가는데, pdfjs 는 텍스트 레이어가 있는 PDF 만 읽는다.
+ * 스캔본인데 CLOVA 를 쓸 수 없으면 글자를 뽑을 방법이 없으므로 그대로 실패시킨다 —
+ * 빈 글로 넘어가면 뒤에서 엉뚱한 문항이 만들어진다.
  */
 async function extractPdf(data: Uint8Array, label: string): Promise<ExtractedDocument> {
   let clovaError: string | null = null;
@@ -167,7 +110,9 @@ async function extractPdf(data: Uint8Array, label: string): Promise<ExtractedDoc
   const perPage = pageTexts.length > 0 ? chars / pageTexts.length : 0;
   const looksLikeScan = chars === 0 || perPage < CHARS_PER_PAGE_THRESHOLD;
 
-  const clovaNote = clovaError ? `CLOVA OCR 실패(${clovaError}) — ` : "";
+  const clovaNote = clovaError
+    ? `CLOVA OCR 실패(${clovaError}) — `
+    : "CLOVA OCR 설정이 없어 — ";
 
   if (!looksLikeScan) {
     return {
@@ -177,21 +122,15 @@ async function extractPdf(data: Uint8Array, label: string): Promise<ExtractedDoc
     };
   }
 
-  if (pageTexts.length > CLAUDE_MAX_PAGES) {
-    throw new Error(
-      `스캔본이고 ${pageTexts.length}쪽이라 한 번에 처리할 수 없습니다. ${CLAUDE_MAX_PAGES}쪽 이하로 나눠 올려 주세요.`,
-    );
-  }
-
+  // 여기까지 왔다는 것은 스캔본인데 CLOVA 를 쓰지 못했다는 뜻이다.
   const reason = pdfjsError
-    ? `pdfjs 읽기 실패(${pdfjsError})`
-    : `텍스트 레이어가 쪽당 ${Math.round(perPage)}자뿐`;
+    ? `pdfjs 로도 읽지 못했습니다(${pdfjsError})`
+    : `텍스트 레이어가 쪽당 ${Math.round(perPage)}자뿐이라 스캔본입니다`;
 
-  return {
-    method: "claude",
-    pageTexts: await readWithClaude(data, label),
-    note: `${clovaNote}${reason} — ${serverEnv.extractionModel} 로 글자를 옮겼습니다.`,
-  };
+  throw new Error(
+    `${clovaNote}${reason}. 스캔본은 CLOVA OCR 로만 읽습니다 — ` +
+      "CLOVA_OCR_INVOKE_URL · CLOVA_OCR_SECRET 을 확인해 주세요.",
+  );
 }
 
 /** HWPX 는 OWPML(XML)이라 글자가 그대로 들어 있다. 스캔본이라는 것이 없다. */

@@ -97,6 +97,8 @@ export function toQuestion(snap: DocumentSnapshot): Question {
     passages: data.passages ?? [],
     charTarget: data.charTarget ?? null,
     tolerance: data.tolerance ?? 0.1,
+    charMin: data.charMin ?? null,
+    charMax: data.charMax ?? null,
     lengthNote: data.lengthNote ?? null,
     points: data.points ?? null,
     answerFormat: data.answerFormat ?? "manuscript",

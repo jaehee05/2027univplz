@@ -21,6 +21,8 @@ function blankQuestion(index: number): Question {
     passages: [],
     charTarget: null,
     tolerance: 0.1,
+    charMin: null,
+    charMax: null,
     lengthNote: null,
     points: null,
     answerFormat: "manuscript",
@@ -157,7 +159,12 @@ export function QuestionEditor({ univId, examId, initial, onSaved }: Props) {
       <div className="mt-4 space-y-4">
         {questions.map((question, index) => {
           const range = question.charTarget
-            ? lengthRange({ target: question.charTarget, tolerance: question.tolerance })
+            ? lengthRange({
+                target: question.charTarget,
+                tolerance: question.tolerance,
+                min: question.charMin,
+                max: question.charMax,
+              })
             : null;
 
           return (
@@ -206,13 +213,25 @@ export function QuestionEditor({ univId, examId, initial, onSaved }: Props) {
                   <label className="text-sm">
                     <span className="text-xs text-neutral-500">허용 오차</span>
                     <select
-                      value={question.tolerance}
-                      onChange={(event) => update(index, { tolerance: Number(event.target.value) })}
+                      value={question.charMin != null || question.charMax != null ? "fixed" : String(question.tolerance)}
+                      onChange={(event) => {
+                        if (event.target.value === "fixed") {
+                          // 비율 대신 숫자로 못 박는다 — 지금 값을 채워 두고 고치게 한다.
+                          update(index, range ? { charMin: range.min, charMax: range.max } : {});
+                          return;
+                        }
+                        update(index, {
+                          tolerance: Number(event.target.value),
+                          charMin: null,
+                          charMax: null,
+                        });
+                      }}
                       className={inputClass}
                     >
-                      <option value={0.05}>±5%</option>
-                      <option value={0.1}>±10%</option>
-                      <option value={0.15}>±15%</option>
+                      <option value="0.05">±5%</option>
+                      <option value="0.1">±10%</option>
+                      <option value="0.15">±15%</option>
+                      <option value="fixed">직접 지정</option>
                     </select>
                   </label>
                   <label className="text-sm">
@@ -229,6 +248,40 @@ export function QuestionEditor({ univId, examId, initial, onSaved }: Props) {
                     />
                   </label>
                 </div>
+
+                {question.charMin != null || question.charMax != null ? (
+                  <div className="flex flex-wrap items-end gap-2">
+                    <label className="text-sm">
+                      <span className="block text-xs text-neutral-500">허용 하한</span>
+                      <input
+                        value={question.charMin ?? ""}
+                        onChange={(event) =>
+                          update(index, {
+                            charMin: event.target.value ? Number(event.target.value) : null,
+                          })
+                        }
+                        inputMode="numeric"
+                        className="mt-1 w-24 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="text-sm">
+                      <span className="block text-xs text-neutral-500">허용 상한</span>
+                      <input
+                        value={question.charMax ?? ""}
+                        onChange={(event) =>
+                          update(index, {
+                            charMax: event.target.value ? Number(event.target.value) : null,
+                          })
+                        }
+                        inputMode="numeric"
+                        className="mt-1 w-24 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <p className="pb-2 text-xs text-neutral-500">
+                      문제지가 범위를 못 박은 경우입니다. 비우면 다시 비율로 계산합니다.
+                    </p>
+                  </div>
+                ) : null}
 
                 <label className="block text-sm">
                   <span className="text-xs text-neutral-500">분량 조건 문구</span>

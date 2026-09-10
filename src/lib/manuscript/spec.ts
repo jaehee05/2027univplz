@@ -23,12 +23,18 @@ export const DEFAULT_SPEC: ManuscriptSpec = {
 };
 
 /**
- * 문항이 요구하는 분량. "600자 내외" → { target: 600, tolerance: 0.1 }
- * 표시선은 target 위치에, 허용 범위는 tolerance 로 계산한다.
+ * 문항이 요구하는 분량.
+ *
+ * 대개 "600자 내외" 처럼 목표만 적혀 있어 tolerance(기본 ±10%)로 범위를 잡는다.
+ * 그런데 문제지가 "(800±100자)" 나 "500자 이상 600자 이하" 처럼 범위를 못 박기도 한다.
+ * 그때는 min · max 를 그대로 쓴다 — 비율로 환산하면 문제지와 다른 수가 나온다.
  */
 export interface LengthRule {
   target: number;
   tolerance: number;
+  /** 문제지가 정한 하한 · 상한. 없으면 target 과 tolerance 로 계산한다. */
+  min?: number | null;
+  max?: number | null;
 }
 
 export const DEFAULT_TOLERANCE = 0.1;
@@ -40,10 +46,14 @@ export interface LengthRange {
 }
 
 export function lengthRange(rule: LengthRule): LengthRange {
+  // 허용 폭을 먼저 정수로 만든다.
+  // target * (1 + 0.1) 로 곱하면 400 이 440.00000000000006 이 되어 상한이 441 로 밀린다.
+  const delta = Math.round(rule.target * rule.tolerance);
+
   return {
-    min: Math.floor(rule.target * (1 - rule.tolerance)),
+    min: rule.min ?? rule.target - delta,
     target: rule.target,
-    max: Math.ceil(rule.target * (1 + rule.tolerance)),
+    max: rule.max ?? rule.target + delta,
   };
 }
 

@@ -27,6 +27,16 @@ const parsedQuestionSchema = z.object({
   prompt: z.string().describe("논제 문장 전문"),
   passages: z.array(passageSchema),
   charTarget: z.number().int().nullable().describe("분량 조건의 글자 수. 없으면 null"),
+  charMin: z
+    .number()
+    .int()
+    .nullable()
+    .describe("문제지가 하한을 못 박았을 때만. (800±100자) 면 700"),
+  charMax: z
+    .number()
+    .int()
+    .nullable()
+    .describe("문제지가 상한을 못 박았을 때만. (800±100자) 면 900"),
   lengthNote: z.string().nullable().describe("분량 조건 문구 그대로. 없으면 null"),
   points: z.number().nullable().describe("배점. 적혀 있지 않으면 null"),
   answerFormat: z.enum(["manuscript", "free"]),
@@ -79,6 +89,8 @@ export function normalizeQuestions(parsed: {
       passages: q.passages,
       charTarget: q.charTarget,
       tolerance: 0.1,
+      charMin: q.charMin,
+      charMax: q.charMax,
       lengthNote: q.lengthNote,
       points: q.points,
       answerFormat: q.answerFormat,

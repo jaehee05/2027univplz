@@ -1,6 +1,6 @@
 import { layoutManuscript } from "@/lib/manuscript/layout";
 import { checkManuscript } from "@/lib/manuscript/rules";
-import { DEFAULT_SPEC, rowCapacity } from "@/lib/manuscript/spec";
+import { DEFAULT_SPEC, lengthRange, rowCapacity, type LengthRule } from "@/lib/manuscript/spec";
 
 function render(text: string, spec = DEFAULT_SPEC) {
   const layout = layoutManuscript(text, spec);
@@ -120,6 +120,28 @@ console.log("\n=== 9. 물음표·느낌표 뒤는 한 칸 비운다 ===");
   rows.forEach((r) => console.log(r));
   const spaceCells = layout.cells.filter((c) => c.kind === "space").length;
   check("물음표 뒤 공백 칸 유지", spaceCells === 1, `공백 칸 ${spaceCells}개`);
+}
+
+console.log("\n=== 10. 분량 허용 범위 ===");
+{
+  const cases: [string, LengthRule, number, number][] = [
+    ["400자 내외 ±10%", { target: 400, tolerance: 0.1 }, 360, 440],
+    ["800자 내외 ±10%", { target: 800, tolerance: 0.1 }, 720, 880],
+    ["900자 내외 ±10%", { target: 900, tolerance: 0.1 }, 810, 990],
+    ["600자 내외 ±5%", { target: 600, tolerance: 0.05 }, 570, 630],
+    // 문제지가 범위를 못 박은 경우 — 비율로 환산하지 않는다
+    ["(800±100자)", { target: 800, tolerance: 0.1, min: 700, max: 900 }, 700, 900],
+    ["500자 이상 600자 이하", { target: 550, tolerance: 0.1, min: 500, max: 600 }, 500, 600],
+  ];
+
+  for (const [label, rule, min, max] of cases) {
+    const range = lengthRange(rule);
+    check(
+      `${label} → ${min}~${max}자`,
+      range.min === min && range.max === max,
+      `${range.min}~${range.max}자`,
+    );
+  }
 }
 
 console.log(failures === 0 ? "\n전부 통과" : `\n${failures}건 실패`);

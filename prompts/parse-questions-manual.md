@@ -13,7 +13,9 @@
       "prompt": "논제 문장 전문",
       "passages": [{ "label": "가", "text": "제시문 전문" }],
       "charTarget": 600,
-      "lengthNote": "600자 내외 (±10%)",
+      "charMin": null,
+      "charMax": null,
+      "lengthNote": "600자 내외",
       "points": 30,
       "answerFormat": "manuscript"
     }
@@ -26,5 +28,8 @@
 
 - `prompt` 와 `passages[].text` 는 문제지에 적힌 **글자 그대로** 옮긴다. 줄이거나 다듬지 마라.
 - `charTarget` · `lengthNote` · `points` 는 없으면 `null` 이다. 지어내지 마라.
+- `charMin` · `charMax` 는 **문제지가 범위를 못 박았을 때만** 채운다.
+  `(800±100자)` → charTarget 800, charMin 700, charMax 900.
+  `600자 내외` 처럼 목표만 있으면 둘 다 `null` 로 둔다.
 - `answerFormat` 은 `"manuscript"` 또는 `"free"` 둘 중 하나다.
 - 문항을 하나도 못 찾겠으면 `questions` 를 빈 배열로 두고 `note` 에 이유를 적는다.

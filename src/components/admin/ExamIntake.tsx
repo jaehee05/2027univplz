@@ -150,11 +150,7 @@ export function ExamIntake({ universities, fixedUnivId, onExams, onDone }: Props
       message: [
         `${payload.file.pageCount}쪽 · ${rows.length}개로 나눔`,
         univId ? null : "대학 못 알아냄",
-        payload.extraction.method === "clova"
-          ? "스캔본 · OCR"
-          : payload.extraction.method === "claude"
-            ? "스캔본"
-            : null,
+        payload.extraction.method === "clova" ? "OCR" : null,
       ]
         .filter(Boolean)
         .join(" · "),

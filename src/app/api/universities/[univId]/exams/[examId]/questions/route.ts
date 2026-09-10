@@ -23,6 +23,8 @@ const questionSchema = z.object({
     .max(20),
   charTarget: z.number().int().min(50).max(5000).nullable(),
   tolerance: z.number().min(0).max(0.5),
+  charMin: z.number().int().min(0).max(20000).nullable().default(null),
+  charMax: z.number().int().min(0).max(20000).nullable().default(null),
   lengthNote: z.string().trim().max(200).nullable(),
   points: z.number().min(0).max(1000).nullable(),
   answerFormat: z.enum(["manuscript", "free"]),

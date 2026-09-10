@@ -28,7 +28,12 @@ export function AnswerWriter({
 
   const locked = initial.status === "submitted";
   const lengthRule: LengthRule | null = assignment.charTarget
-    ? { target: assignment.charTarget, tolerance: assignment.tolerance }
+    ? {
+        target: assignment.charTarget,
+        tolerance: assignment.tolerance,
+        min: assignment.charMin,
+        max: assignment.charMax,
+      }
     : null;
 
   const save = useCallback(

@@ -14,6 +14,8 @@ const pastedSchema = z.object({
       prompt: z.string(),
       passages: z.array(z.object({ label: z.string(), text: z.string() })).default([]),
       charTarget: z.number().int().nullable().default(null),
+      charMin: z.number().int().nullable().default(null),
+      charMax: z.number().int().nullable().default(null),
       lengthNote: z.string().nullable().default(null),
       points: z.number().nullable().default(null),
       answerFormat: z.enum(["manuscript", "free"]).default("manuscript"),

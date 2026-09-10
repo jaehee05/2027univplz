@@ -49,7 +49,12 @@ export default async function CorrectionPage({ params }: PageProps<"/admin/corre
         studentName={assignment?.studentName ?? ""}
         lengthRule={
           assignment?.charTarget
-            ? { target: assignment.charTarget, tolerance: assignment.tolerance }
+            ? {
+                target: assignment.charTarget,
+                tolerance: assignment.tolerance,
+                min: assignment.charMin,
+                max: assignment.charMax,
+              }
             : null
         }
         label={assignment ? `문제 ${assignment.questionNumber}` : undefined}
