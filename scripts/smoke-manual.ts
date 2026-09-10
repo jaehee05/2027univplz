@@ -92,7 +92,70 @@ async function main() {
   ).length;
   console.log(`  ${misplaced === 0 ? "✔" : "✖"} 코멘트 위치가 모두 답안 안쪽`);
 
-  console.log("\n✔ 직접 첨삭 통과");
+  // ── 문항 뽑기 · 채점 기준 분석도 같은 방식으로 되는지 ──────────
+  const exams = await db.collection("universities").doc(assignment.univId).collection("exams").get();
+  const exam = exams.docs.find((d) => d.id === assignment.examId);
+  const base = `/api/universities/${assignment.univId}/exams/${assignment.examId}`;
+
+  // 확정된 기준은 덮어쓰지 않게 막혀 있다. 그 경로를 확인하려면 잠시 풀어 둔다.
+  const analysisPath = `/api/universities/${assignment.univId}/analyses/${assignment.examId}`;
+  const before = await api(analysisPath).catch(() => ({ analysis: null }));
+  const wasConfirmed = before.analysis?.status === "confirmed";
+  if (wasConfirmed) {
+    await api(analysisPath, { method: "PATCH", body: JSON.stringify({ status: "draft" }) });
+    console.log("\n(확정을 잠시 풀었습니다 — 끝나고 되돌립니다)");
+  }
+
+  let failed = 0;
+  for (const [label, path, check] of [
+    ["문항 뽑기", "parse-questions", (d: { questions: unknown[] }) => `문항 ${d.questions.length}개`],
+    [
+      "채점 기준 분석",
+      "analyze",
+      (d: { analysis: { rubric: { items: unknown[] }; status: string } }) =>
+        `항목 ${d.analysis.rubric.items.length}개 · ${d.analysis.status}`,
+    ],
+  ] as const) {
+    console.log(`\n▶ ${label} — 프롬프트 만들기`);
+    const built = await api(`${base}/${path}/prompt`);
+    console.log(`  ${built.prompt.length.toLocaleString()}자`);
+
+    console.log(`▶ ${label} — 모델에 넣고 받은 답을 붙여 넣기`);
+    const stream2 = client.messages.stream({
+      model: "claude-sonnet-5",
+      max_tokens: 16000,
+      thinking: { type: "disabled" },
+      messages: [{ role: "user", content: built.prompt }],
+    });
+    const got = (await stream2.finalMessage()).content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+
+    try {
+      const saved2 = await api(`${base}/${path}/manual`, {
+        method: "POST",
+        body: JSON.stringify({ pasted: `알겠습니다.\n\n${got}\n\n확인해 주세요.` }),
+      });
+      console.log(`  ✔ ${check(saved2)}`);
+    } catch (error) {
+      console.log(`  ✖ ${error instanceof Error ? error.message : "실패"}`);
+      failed += 1;
+    }
+  }
+
+  if (wasConfirmed && exam) {
+    // 풀어 둔 확정을 되돌린다.
+    await api(analysisPath, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "confirmed" }),
+    }).catch(() =>
+      console.log("  ⚠ 확정을 되돌리지 못했습니다 — 배점 합계가 100 인지 화면에서 확인하세요."),
+    );
+  }
+
+  if (failed > 0) throw new Error(`${failed}가지가 실패했습니다.`);
+  console.log("\n✔ 직접 돌리기 세 가지 모두 통과");
 }
 
 main().catch((e) => {
