@@ -87,6 +87,7 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
           hasPdf={hasPdf}
           pageFrom={paper?.pageFrom ?? null}
           pageTo={paper?.pageTo ?? null}
+          version={[paper?.uploadedAt ?? "", paper?.pageFrom ?? 0, paper?.pageTo ?? 0].join("-")}
         />
 
         <div className="min-h-0 overflow-y-auto xl:pr-1">

@@ -53,16 +53,15 @@ export async function GET(request: Request, ctx: Ctx) {
   }
 
   try {
-    // 선생님은 원본 전체를, 학생은 배정된 쪽만 본다.
-    const bytes =
-      auth.user.role === "teacher"
-        ? await cropPdfPages(file.storagePath, null, null)
-        : await cropPdfPages(file.storagePath, file.pageFrom, file.pageTo);
+    // 선생님이 봐도 배정된 쪽만 내보낸다 — 학생이 보는 것과 같아야 확인이 된다.
+    // 원본 전체는 관리 화면에서 본다.
+    const bytes = await cropPdfPages(file.storagePath, file.pageFrom, file.pageTo);
 
     return new Response(new Uint8Array(bytes), {
       headers: {
         "Content-Type": "application/pdf",
-        // 새로 올리기 전까지는 바뀌지 않는다.
+        // 쪽 범위가 바뀌면 주소의 v 값이 달라져 새로 받는다.
+        // 그 장치가 없으면 범위를 좁혀도 학생 브라우저가 예전 파일을 계속 쓴다.
         "Cache-Control": "private, max-age=3600",
         "Content-Disposition": `inline; filename="exam.pdf"`,
       },

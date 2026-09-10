@@ -13,14 +13,24 @@ interface Props {
   /** 한 PDF 안에서 이 시험이 차지하는 쪽 */
   pageFrom: number | null;
   pageTo: number | null;
+  /** 파일이나 쪽 범위가 바뀌면 달라지는 값 — 브라우저가 예전 파일을 계속 쓰지 않게 한다 */
+  version: string;
 }
 
 /** 왼쪽 문제지 칸. 올려 둔 PDF 를 그대로 띄우고, 필요하면 글로 바꿔 본다. */
-export function PaperPane({ assignmentId, prompt, passages, hasPdf, pageFrom, pageTo }: Props) {
+export function PaperPane({
+  assignmentId,
+  prompt,
+  passages,
+  hasPdf,
+  pageFrom,
+  pageTo,
+  version,
+}: Props) {
   const [mode, setMode] = useState<"pdf" | "text">(hasPdf ? "pdf" : "text");
 
   // 서버가 배정된 쪽만 잘라서 내보내므로 여기서는 통째로 열면 된다.
-  const src = `/api/assignments/${assignmentId}/paper`;
+  const src = `/api/assignments/${assignmentId}/paper?v=${encodeURIComponent(version)}`;
 
   return (
     <section className="flex h-full min-h-0 flex-col">
