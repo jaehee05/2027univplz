@@ -10,8 +10,10 @@ import { getFirestore } from "firebase-admin/firestore";
 
 process.loadEnvFile(".env.local");
 
+import { anthropic } from "@/lib/anthropic/client";
 import { correctAnswer, type CorrectionOptions } from "@/lib/anthropic/correct";
 import { toAnalysis, toQuestion } from "@/lib/exam/store";
+import type { Question } from "@/lib/types/exam";
 
 /** 100만 토큰당 달러 (입력 / 출력) */
 const PRICE: Record<string, [number, number]> = {
@@ -22,24 +24,43 @@ const PRICE: Record<string, [number, number]> = {
 
 const CONFIGS: { label: string; options: CorrectionOptions }[] = [
   { label: "opus-5 · 기본", options: { model: "claude-opus-5" } },
-  { label: "opus-5 · medium", options: { model: "claude-opus-5", effort: "medium" } },
   { label: "opus-5 · low", options: { model: "claude-opus-5", effort: "low" } },
-  { label: "sonnet-5 · 기본", options: { model: "claude-sonnet-5" } },
   { label: "sonnet-5 · medium", options: { model: "claude-sonnet-5", effort: "medium" } },
   { label: "sonnet-5 · low", options: { model: "claude-sonnet-5", effort: "low" } },
 ];
 
-const ANSWER =
-  "근대의 공론장은 신분이 아니라 논거의 설득력이 의견의 우열을 가르는 공간이었다. " +
-  "제시문 가는 커피하우스와 살롱에서 시작된 이 토론의 관행이 대중매체의 발달과 함께 " +
-  "소비의 공간으로 바뀌었다고 지적한다. 시민은 토론의 참여자에서 여론의 수용자로 물러났다. " +
-  "제시문 나가 말하는 알고리즘은 이 변화를 한층 심화시킨다. 이용자의 과거 선택을 학습한 " +
-  "알고리즘은 기존 신념을 강화하는 정보만을 반복해서 보여 주고, 다른 견해는 시야에서 지운다. " +
-  "그 결과 개인은 편해지지만 사회는 서로 다른 견해가 부딪히며 조정되는 학습의 기회를 잃는다. " +
-  "이러한 변화는 민주주의의 기반을 흔든다. 민주주의는 다수의 결정이라는 절차만으로 성립하지 " +
-  "않고, 결정에 앞서 서로의 근거를 검토하는 과정을 전제하기 때문이다. 검토가 사라진 자리에 " +
-  "남는 것은 확신을 확인하는 절차뿐이다. 따라서 공론장의 회복은 정보의 양을 늘리는 것이 " +
-  "아니라, 이질적인 견해와 마주칠 수밖에 없는 자리를 제도적으로 만드는 데서 시작해야 한다.";
+/**
+ * 설정별 차이를 보려면 답안이 그 문항에 **실제로 답하는 글**이어야 한다.
+ * 엉뚱한 글을 넣으면 어떤 설정이든 0점을 줘서 견줄 것이 없다.
+ * 그래서 문항을 보고 "학생이 쓸 법한 답안"을 한 번 만들어 모든 설정에 같이 쓴다.
+ */
+async function draftAnswer(question: Question, target: number): Promise<string> {
+  const passages = question.passages.map((p) => `[제시문 ${p.label}]\n${p.text}`).join("\n\n");
+
+  const stream = anthropic().messages.stream({
+    model: "claude-sonnet-5",
+    max_tokens: 4000,
+    thinking: { type: "disabled" },
+    messages: [
+      {
+        role: "user",
+        content:
+          "아래 논술 문항에 대해 **중상위권 학생이 쓸 법한 답안**을 한 편 써라.\n" +
+          "완벽하지 않아도 된다 — 논지는 잡되 제시문 인용이 다소 성기고 " +
+          "결론이 조금 약한, 첨삭할 거리가 있는 글이면 좋다.\n" +
+          `분량은 ${target}자 안팎. 답안 본문만 출력하고 다른 말은 붙이지 마라.\n\n` +
+          `[논제]\n${question.prompt}\n\n${passages}`,
+      },
+    ],
+  });
+
+  const message = await stream.finalMessage();
+  return message.content
+    .filter((b) => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+}
 
 async function main() {
   const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY!);
@@ -70,9 +91,14 @@ async function main() {
   );
 
   console.log(`기준: ${picked.univName} ${exam.year} ${exam.title} ${question.number}번`);
-  console.log(`답안: ${ANSWER.length}자 · 배점 항목 ${analysis.rubric.items.length}개\n`);
-  console.log("설정".padEnd(20) + "출력".padStart(9) + "입력".padStart(9) + "1회 비용".padStart(11) + "  점수  코멘트  예시  걸린 시간");
-  console.log("─".repeat(84));
+  console.log(`논제: ${question.prompt.slice(0, 70)}…`);
+
+  const target = question.charTarget ?? 600;
+  const ANSWER = await draftAnswer(question, target);
+  console.log(`답안: ${ANSWER.length}자 (요구 ${target}자) · 배점 항목 ${analysis.rubric.items.length}개`);
+  console.log(`  ${ANSWER.slice(0, 70)}…\n`);
+  console.log("설정".padEnd(20) + "출력".padStart(9) + "비용".padStart(10) + "  점수  코멘트              예시  시간");
+  console.log("─".repeat(86));
 
   for (const config of CONFIGS) {
     const started = Date.now();
@@ -94,16 +120,21 @@ async function main() {
       const cost =
         (result.usage.inputTokens / 1e6) * inPrice + (result.usage.outputTokens / 1e6) * outPrice;
 
+      const good = result.inlineComments.filter((c) => c.severity === "good").length;
+      const bad = result.inlineComments.filter(
+        (c) => c.severity === "error" || c.severity === "warning",
+      ).length;
+
       console.log(
         config.label.padEnd(20) +
           result.usage.outputTokens.toLocaleString().padStart(9) +
-          result.usage.inputTokens.toLocaleString().padStart(9) +
-          `$${cost.toFixed(3)}`.padStart(11) +
+          `$${cost.toFixed(3)}`.padStart(10) +
           `${String(result.scores.total).padStart(6)}` +
-          `${String(result.inlineComments.length).padStart(7)}` +
-          `${String(result.revisedExample.length).padStart(6)}자` +
+          `${String(result.inlineComments.length).padStart(6)}(좋음 ${good}·지적 ${bad})`.padEnd(20) +
+          `${String(result.revisedExample.length).padStart(5)}자` +
           `${String(Math.round((Date.now() - started) / 1000)).padStart(5)}초`,
       );
+      console.log(`  └ 총평: ${result.overall.summary.slice(0, 90)}…`);
     } catch (error) {
       console.log(
         config.label.padEnd(20) + `  ✖ ${error instanceof Error ? error.message : "실패"}`,
