@@ -2,19 +2,26 @@
 
 import { useState } from "react";
 
-import type { Assignment, Correction } from "@/lib/types/work";
-
 /**
- * 선생님이 자기 Claude 구독으로 직접 첨삭하는 화면.
- * 앱이 프롬프트를 만들어 주고, 받아 온 답을 그대로 받아 저장한다. API 를 쓰지 않으니 비용이 0 이다.
+ * 내 Claude 구독으로 직접 돌리는 공용 화면.
+ * 앱이 프롬프트를 만들어 주고, 받아 온 답을 그대로 받는다. API 를 쓰지 않으니 요금이 없다.
+ * 첨삭 · 문항 뽑기 · 채점 기준 분석이 같은 흐름을 쓴다.
  */
-export function ManualCorrection({
-  assignment,
+export function ManualRun({
+  title,
+  hint,
+  promptUrl,
+  submitUrl,
   onDone,
   onClose,
 }: {
-  assignment: Assignment;
-  onDone: (correction: Correction) => void;
+  title: string;
+  hint?: string;
+  /** 프롬프트를 받아 오는 곳 (GET) */
+  promptUrl: string;
+  /** 붙여 넣은 답을 보내는 곳 (POST { pasted }) */
+  submitUrl: string;
+  onDone: (data: Record<string, unknown>) => void;
   onClose: () => void;
 }) {
   const [prompt, setPrompt] = useState<string | null>(null);
@@ -27,7 +34,7 @@ export function ManualCorrection({
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(`/api/corrections/prompt?assignmentId=${assignment.id}`);
+      const response = await fetch(promptUrl);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "프롬프트를 만들지 못했습니다.");
       setPrompt(data.prompt);
@@ -38,13 +45,6 @@ export function ManualCorrection({
     }
   }
 
-  async function copy() {
-    if (!prompt) return;
-    await navigator.clipboard.writeText(prompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
   async function save() {
     if (!pasted.trim()) {
       setError("Claude 가 준 답을 붙여 넣어 주세요.");
@@ -53,23 +53,16 @@ export function ManualCorrection({
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/corrections/manual", {
+      const response = await fetch(submitUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assignmentId: assignment.id, pasted }),
+        body: JSON.stringify({ pasted }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "저장하지 못했습니다.");
-      if (data.asked > data.matched) {
-        // 자리를 못 찾은 코멘트는 버려진다. 조용히 넘어가면 왜 사라졌는지 알 수 없다.
-        alert(
-          `저장했습니다. 다만 코멘트 ${data.asked}개 중 ${data.asked - data.matched}개는 ` +
-            "답안에서 그 대목을 찾지 못해 빠졌습니다.",
-        );
-      }
-      onDone(data.correction);
+      if (!response.ok) throw new Error(data.error ?? "읽지 못했습니다.");
+      onDone(data);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "저장하지 못했습니다.");
+      setError(caught instanceof Error ? caught.message : "읽지 못했습니다.");
     } finally {
       setBusy(false);
     }
@@ -79,12 +72,10 @@ export function ManualCorrection({
     <div className="mt-3 rounded-lg border border-neutral-300 bg-neutral-50 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h4 className="font-semibold">
-            직접 첨삭 — {assignment.selfPractice ? "나 (연습)" : assignment.studentName}
-          </h4>
+          <h4 className="font-semibold">{title}</h4>
           <p className="mt-0.5 text-sm text-neutral-600">
-            프롬프트를 복사해 claude.ai 에 붙여 넣고, 받은 답을 아래에 그대로 붙이세요.
-            API 를 쓰지 않으니 비용이 들지 않습니다.
+            {hint ?? "프롬프트를 복사해 claude.ai 에 붙여 넣고, 받은 답을 아래에 그대로 붙이세요."}{" "}
+            API 를 쓰지 않으니 요금이 들지 않습니다.
           </p>
         </div>
         <button
@@ -104,14 +95,16 @@ export function ManualCorrection({
               <>
                 <button
                   type="button"
-                  onClick={() => void copy()}
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(prompt);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
                   className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white"
                 >
                   {copied ? "복사했습니다" : "복사"}
                 </button>
-                <span className="text-xs text-neutral-500">
-                  {prompt.length.toLocaleString()}자
-                </span>
+                <span className="text-xs text-neutral-500">{prompt.length.toLocaleString()}자</span>
                 <a
                   href="https://claude.ai/new"
                   target="_blank"
@@ -151,7 +144,7 @@ export function ManualCorrection({
             value={pasted}
             onChange={(event) => setPasted(event.target.value)}
             rows={6}
-            placeholder='{ "scores": { … } } — 코드 블록째 붙여 넣어도 됩니다.'
+            placeholder='{ … } — 코드 블록째 붙여 넣어도 됩니다.'
             className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs"
           />
         </li>
@@ -163,7 +156,7 @@ export function ManualCorrection({
             disabled={busy || !pasted.trim()}
             className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
           >
-            {busy ? "저장 중…" : "3. 첨삭 결과로 저장"}
+            {busy ? "읽는 중…" : "3. 결과 넣기"}
           </button>
         </li>
       </ol>

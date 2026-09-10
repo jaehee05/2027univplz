@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { ManualCorrection } from "@/components/admin/ManualCorrection";
+import { ManualRun } from "@/components/admin/ManualRun";
 
 import { ASSIGNMENT_LABEL, type Assignment, type Correction } from "@/lib/types/work";
 
@@ -219,11 +219,22 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
             </div>
 
             {manual === row.id ? (
-              <ManualCorrection
-                assignment={row}
+              <ManualRun
+                title={`직접 첨삭 — ${row.selfPractice ? "나 (연습)" : row.studentName}`}
+                promptUrl={`/api/corrections/prompt?assignmentId=${row.id}`}
+                submitUrl={`/api/corrections/manual?assignmentId=${row.id}`}
                 onClose={() => setManual(null)}
-                onDone={(correction) => {
+                onDone={(data) => {
+                  const asked = Number(data.asked ?? 0);
+                  const matched = Number(data.matched ?? 0);
+                  if (asked > matched) {
+                    // 자리를 못 찾은 코멘트는 빠진다. 조용히 넘어가면 왜 사라졌는지 알 수 없다.
+                    setError(
+                      `저장했습니다. 다만 코멘트 ${asked}개 중 ${asked - matched}개는 답안에서 그 대목을 찾지 못해 빠졌습니다.`,
+                    );
+                  }
                   setManual(null);
+                  const correction = data.correction as { id: string };
                   setRows((prev) =>
                     prev.map((item) =>
                       item.id === row.id

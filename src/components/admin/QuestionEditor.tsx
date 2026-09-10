@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ManualRun } from "@/components/admin/ManualRun";
 import { lengthRange } from "@/lib/manuscript/spec";
 import type { Question } from "@/lib/types/exam";
 
@@ -33,6 +34,7 @@ const inputClass = "mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 t
 export function QuestionEditor({ univId, examId, initial, onSaved }: Props) {
   const [questions, setQuestions] = useState<Question[]>(initial);
   const [parsing, setParsing] = useState(false);
+  const [manual, setManual] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -100,9 +102,18 @@ export function QuestionEditor({ univId, examId, initial, onSaved }: Props) {
             type="button"
             onClick={() => void parse()}
             disabled={parsing}
+            title="Claude API 로 돌립니다. 기출 하나에 요금이 듭니다."
             className="rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:opacity-50"
           >
             {parsing ? "파싱 중…" : "PDF 에서 문항 뽑기"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setManual(!manual)}
+            title="프롬프트를 복사해 내 Claude 구독으로 돌리고 결과만 붙여 넣습니다. 요금이 들지 않습니다."
+            className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          >
+            직접 뽑기
           </button>
           <button
             type="button"
@@ -121,6 +132,24 @@ export function QuestionEditor({ univId, examId, initial, onSaved }: Props) {
           </button>
         </div>
       </div>
+
+      {manual ? (
+        <ManualRun
+          title="직접 문항 뽑기"
+          promptUrl={`${base}/parse-questions/prompt`}
+          submitUrl={`${base}/parse-questions/manual`}
+          onClose={() => setManual(false)}
+          onDone={(data) => {
+            const found = (data.questions ?? []) as Question[];
+            setQuestions(found);
+            setManual(false);
+            setNote(
+              `문항 ${found.length}개를 넣었습니다. 확인 후 저장하세요.` +
+                (data.note ? ` (${data.note})` : ""),
+            );
+          }}
+        />
+      ) : null}
 
       {note ? <p className="mt-2 text-sm text-neutral-600">{note}</p> : null}
       {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}

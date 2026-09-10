@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ManualRun } from "@/components/admin/ManualRun";
 import {
   RUBRIC_TOTAL,
   rubricTotalsByQuestion,
@@ -31,6 +32,7 @@ function InferredBadge({ inferred }: { inferred: boolean }) {
 export function RubricEditor({ univId, examId, initial, onStatus }: Props) {
   const [analysis, setAnalysis] = useState<Analysis | null>(initial);
   const [running, setRunning] = useState(false);
+  const [manual, setManual] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -134,10 +136,23 @@ export function RubricEditor({ univId, examId, initial, onStatus }: Props) {
             type="button"
             onClick={() => void analyze()}
             disabled={running || confirmed}
-            title={confirmed ? "확정을 먼저 풀어야 다시 분석할 수 있습니다." : undefined}
+            title={
+              confirmed
+                ? "확정을 먼저 풀어야 다시 분석할 수 있습니다."
+                : "Claude API 로 돌립니다. 기출 하나에 요금이 듭니다."
+            }
             className="rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:opacity-40"
           >
             {running ? "분석 중…" : analysis ? "다시 분석" : "채점 기준 분석"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setManual(!manual)}
+            disabled={confirmed}
+            title="프롬프트를 복사해 내 Claude 구독으로 돌리고 결과만 붙여 넣습니다. 요금이 들지 않습니다."
+            className="rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:opacity-40"
+          >
+            직접 분석
           </button>
           {analysis ? (
             <>
@@ -166,6 +181,22 @@ export function RubricEditor({ univId, examId, initial, onStatus }: Props) {
           ) : null}
         </div>
       </div>
+
+      {manual ? (
+        <ManualRun
+          title="직접 채점 기준 분석"
+          promptUrl={`${examBase}/analyze/prompt`}
+          submitUrl={`${examBase}/analyze/manual`}
+          onClose={() => setManual(false)}
+          onDone={(data) => {
+            const next = data.analysis as Analysis;
+            setAnalysis(next);
+            onStatus("draft");
+            setManual(false);
+            setNote(`초안을 넣었습니다. 배점 항목 ${next.rubric.items.length}개.`);
+          }}
+        />
+      ) : null}
 
       {note ? <p className="mt-2 text-sm text-neutral-600">{note}</p> : null}
       {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}

@@ -3,35 +3,9 @@ import { z } from "zod";
 
 import { apiTeacher } from "@/lib/auth/dal";
 import { normalizeCorrection } from "@/lib/anthropic/correct";
+import { extractJson } from "@/lib/anthropic/paste";
 import { loadCorrectionInput } from "@/lib/work/correction-input";
 import { assignmentRef, correctionRef, corrections, toCorrection } from "@/lib/work/store";
-
-/** claude.ai 는 JSON 앞뒤에 말이나 코드 블록을 붙이기도 한다. 거기서 JSON 만 꺼낸다. */
-function extractJson(raw: string): unknown {
-  const text = raw.trim();
-
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidates = [fenced?.[1], text].filter(Boolean) as string[];
-
-  for (const candidate of candidates) {
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      // 앞뒤에 말이 붙은 경우 — 가장 바깥 중괄호만 잘라 본다.
-      const start = candidate.indexOf("{");
-      const end = candidate.lastIndexOf("}");
-      if (start !== -1 && end > start) {
-        try {
-          return JSON.parse(candidate.slice(start, end + 1));
-        } catch {
-          // 다음 후보로
-        }
-      }
-    }
-  }
-
-  throw new Error("붙여 넣은 글에서 JSON 을 찾지 못했습니다. 중괄호로 시작하는 부분만 넣어 주세요.");
-}
 
 const pastedSchema = z.object({
   scores: z.object({
@@ -73,7 +47,7 @@ const pastedSchema = z.object({
 });
 
 const bodySchema = z.object({
-  assignmentId: z.string().min(1),
+  assignmentId: z.string().min(1).optional(),
   /** claude.ai 에서 받은 답 그대로 */
   pasted: z.string().min(2).max(200_000),
 });
@@ -88,7 +62,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
 
-  const loaded = await loadCorrectionInput(parsedBody.data.assignmentId, auth.user.uid);
+  // 공용 화면은 { pasted } 만 보내므로 과제는 주소에서도 받는다.
+  const assignmentId =
+    parsedBody.data.assignmentId ?? new URL(request.url).searchParams.get("assignmentId");
+  if (!assignmentId) {
+    return Response.json({ error: "과제를 지정해 주세요." }, { status: 400 });
+  }
+
+  const loaded = await loadCorrectionInput(assignmentId, auth.user.uid);
   if (!loaded.ok) return Response.json({ error: loaded.error }, { status: loaded.status });
 
   let result;

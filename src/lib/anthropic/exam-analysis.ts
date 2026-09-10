@@ -45,17 +45,52 @@ export interface ParseQuestionsResult {
   usage: CallUsage;
 }
 
-export async function parseQuestions(input: {
+export interface ParseInput {
   university: string;
   year: number;
   examText: string;
-}): Promise<ParseQuestionsResult> {
+}
+
+/** `manual` 이면 claude.ai 에 그대로 붙일 수 있게 JSON 형식 안내를 뒤에 붙인다. */
+export async function buildParsePrompt(
+  input: ParseInput,
+  options: { manual?: boolean } = {},
+): Promise<string> {
   const template = await loadPrompt("parse-questions");
   const prompt = fillPrompt(template, {
     university: input.university,
     year: String(input.year),
     examText: clip(input.examText),
   });
+  if (!options.manual) return prompt;
+  return `${prompt}\n\n${await loadPrompt("parse-questions-manual")}`;
+}
+
+/** 모델이 돌려준 문항을 화면에서 쓰는 모양으로 다듬는다. */
+export function normalizeQuestions(parsed: {
+  questions: ParsedQuestion[];
+  note: string;
+}): { questions: Question[]; note: string } {
+  return {
+    questions: parsed.questions.map((q, index) => ({
+      id: slugifyNumber(q.number, index),
+      number: q.number,
+      prompt: q.prompt,
+      passages: q.passages,
+      charTarget: q.charTarget,
+      tolerance: 0.1,
+      lengthNote: q.lengthNote,
+      points: q.points,
+      answerFormat: q.answerFormat,
+      modelAnswer: null,
+      source: "parsed",
+    })),
+    note: parsed.note,
+  };
+}
+
+export async function parseQuestions(input: ParseInput): Promise<ParseQuestionsResult> {
+  const prompt = await buildParsePrompt(input);
 
   const model = serverEnv.correctionModel;
   const stream = anthropic().messages.stream({
@@ -73,20 +108,7 @@ export async function parseQuestions(input: {
   }
 
   return {
-    questions: parsed.questions.map((q, index) => ({
-      id: slugifyNumber(q.number, index),
-      number: q.number,
-      prompt: q.prompt,
-      passages: q.passages,
-      charTarget: q.charTarget,
-      tolerance: 0.1,
-      lengthNote: q.lengthNote,
-      points: q.points,
-      answerFormat: q.answerFormat,
-      modelAnswer: null,
-      source: "parsed",
-    })),
-    note: parsed.note,
+    ...normalizeQuestions(parsed),
     usage: {
       model,
       inputTokens: message.usage.input_tokens,
@@ -144,14 +166,19 @@ export type AnalysisPayload = Pick<
   "questionTypes" | "rubric" | "answerStyle" | "modelAnswerPatterns"
 >;
 
-export async function analyzeRubric(input: {
+export interface AnalyzeInput {
   university: string;
   year: number;
   examText: string;
   solutionText: string;
   /** 이미 저장해 둔 문항 번호. 있으면 이 번호를 그대로 쓰게 한다. */
   questionNumbers: string[];
-}): Promise<{ analysis: AnalysisPayload; usage: CallUsage }> {
+}
+
+export async function buildAnalyzePrompt(
+  input: AnalyzeInput,
+  options: { manual?: boolean } = {},
+): Promise<string> {
   const template = await loadPrompt("analyze-rubric");
   const prompt = fillPrompt(template, {
     university: input.university,
@@ -162,6 +189,32 @@ export async function analyzeRubric(input: {
       ? input.questionNumbers.map((n) => `${n}번`).join(", ")
       : "(아직 문항을 저장하지 않았습니다. 문제지에서 읽어 낸 번호를 쓰세요.)",
   });
+  if (!options.manual) return prompt;
+  return `${prompt}\n\n${await loadPrompt("analyze-rubric-manual")}`;
+}
+
+/** 모델이 돌려준 채점 기준에 항목 id 를 붙인다. */
+export function normalizeAnalysis(parsed: {
+  questionTypes: AnalysisPayload["questionTypes"];
+  rubric: { items: Omit<AnalysisPayload["rubric"]["items"][number], "id">[]; deductions: AnalysisPayload["rubric"]["deductions"] };
+  answerStyle: AnalysisPayload["answerStyle"];
+  modelAnswerPatterns: string[];
+}): AnalysisPayload {
+  return {
+    questionTypes: parsed.questionTypes,
+    rubric: {
+      items: parsed.rubric.items.map((item, index) => ({ id: `r${index + 1}`, ...item })),
+      deductions: parsed.rubric.deductions,
+    },
+    answerStyle: parsed.answerStyle,
+    modelAnswerPatterns: parsed.modelAnswerPatterns,
+  };
+}
+
+export async function analyzeRubric(
+  input: AnalyzeInput,
+): Promise<{ analysis: AnalysisPayload; usage: CallUsage }> {
+  const prompt = await buildAnalyzePrompt(input);
 
   const model = serverEnv.correctionModel;
   const stream = anthropic().messages.stream({
@@ -179,18 +232,7 @@ export async function analyzeRubric(input: {
   }
 
   return {
-    analysis: {
-      questionTypes: parsed.questionTypes,
-      rubric: {
-        items: parsed.rubric.items.map((item, index) => ({
-          id: `r${index + 1}`,
-          ...item,
-        })),
-        deductions: parsed.rubric.deductions,
-      },
-      answerStyle: parsed.answerStyle,
-      modelAnswerPatterns: parsed.modelAnswerPatterns,
-    },
+    analysis: normalizeAnalysis(parsed),
     usage: {
       model,
       inputTokens: message.usage.input_tokens,
