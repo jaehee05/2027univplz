@@ -185,7 +185,20 @@ export async function buildCorrectionPrompt(
   const items = rubricItemsFor(input);
   const template = await loadPrompt("correct");
 
+  /**
+   * 코멘트 위치를 어떻게 표시할지는 경로마다 다르다.
+   * API 는 글자 번호를 세게 하고, 사람이 옮겨 붙일 때는 셀 수 없으니 원문 조각을 받는다.
+   */
+  const positionRule = options.manual
+    ? "- `quote` 는 답안에서 **글자 그대로 옮긴 짧은 대목**이다. 10~40자가 알맞다.\n" +
+      "  한 글자라도 다르면 프로그램이 그 자리를 찾지 못한다. 줄임표나 따옴표를 덧붙이지 마라.\n" +
+      "  글자 번호는 세지 않아도 된다."
+    : "- `start` · `end` 는 **답안 원문의 문자 위치**다. 0 부터 세고 `end` 는 포함하지 않는다.\n" +
+      "  아래 답안은 줄 번호나 칸 번호가 아니라 글자를 이어 붙인 것이고, 위치는 그 글자 기준이다.\n" +
+      "- 반드시 그 구간의 글자를 다시 확인하고 위치를 정확히 잡아라. 어긋나면 학생이 엉뚱한 곳을 본다.";
+
   const prompt = fillPrompt(template, {
+    positionRule,
     university: input.university,
     examTitle: input.examTitle,
     questionNumber: input.question.number,
