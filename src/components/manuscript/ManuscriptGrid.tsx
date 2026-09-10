@@ -29,6 +29,8 @@ interface ManuscriptGridProps {
   issues?: Mark[];
   /** 지금 보고 있는 코멘트 — 테두리로 따로 표시한다 */
   activeRange?: { start: number; end: number } | null;
+  /** 번호가 붙은 칸을 눌렀을 때 */
+  onMarkSelect?: (index: number) => void;
   cellSize?: number;
 }
 
@@ -38,6 +40,8 @@ export interface Mark {
   severity: MarkTone;
   start: number;
   end: number;
+  /** 코멘트 번호 — 있으면 시작 칸에 작게 붙여 목록과 잇는다 */
+  index?: number;
 }
 
 const MARK_CLASS: Record<Exclude<MarkTone, "info">, string> = {
@@ -67,6 +71,7 @@ export function ManuscriptGrid({
   onCellSelect,
   issues = [],
   activeRange = null,
+  onMarkSelect,
   cellSize = 22,
 }: ManuscriptGridProps) {
   const range = lengthRule ? lengthRange(lengthRule) : null;
@@ -91,6 +96,22 @@ export function ManuscriptGrid({
       }
     }
     return marks;
+  }, [issues, layout.cells]);
+
+  /** 코멘트 번호를 붙일 칸 — 그 코멘트가 시작되는 칸이다. */
+  const markers = useMemo(() => {
+    const map = new Map<string, number[]>();
+    for (const issue of issues) {
+      if (issue.index == null) continue;
+      // 시작 위치를 담고 있는 칸을 찾는다. 없으면(공백에서 시작) 그 뒤 첫 칸.
+      const cell =
+        layout.cells.find((c) => issue.start >= c.start && issue.start < c.end) ??
+        layout.cells.find((c) => c.start >= issue.start);
+      if (!cell) continue;
+      const key = `${cell.row}:${cell.col}`;
+      map.set(key, [...(map.get(key) ?? []), issue.index]);
+    }
+    return map;
   }, [issues, layout.cells]);
 
   /** 지금 보고 있는 코멘트가 덮는 칸 */
@@ -175,6 +196,11 @@ export function ManuscriptGrid({
                     tabIndex={-1}
                     onMouseDown={(event) => {
                       event.preventDefault();
+                      const numbers = markers.get(key);
+                      if (numbers?.length && onMarkSelect) {
+                        onMarkSelect(numbers[0]);
+                        return;
+                      }
                       onCellSelect?.(slot.cell ? slot.cell.start : (layout.cells.at(-1)?.end ?? 0));
                     }}
                     className={[
@@ -184,7 +210,7 @@ export function ManuscriptGrid({
                       mark ? MARK_CLASS[mark] : overLimit ? "bg-red-50" : "bg-transparent",
                       active.has(key) ? "ring-2 ring-inset ring-neutral-900" : "",
                       isCaret ? "ring-2 ring-inset ring-sky-500" : "",
-                      onCellSelect ? "cursor-text" : "cursor-default",
+                      onCellSelect ? "cursor-text" : markers.has(key) ? "cursor-pointer" : "cursor-default",
                     ].join(" ")}
                     style={{
                       width: "var(--cell)",
@@ -217,6 +243,23 @@ export function ManuscriptGrid({
                         ) : null}
                       </>
                     ) : null}
+
+                    {/* 코멘트 번호 — 목록의 같은 번호와 이어진다 */}
+                    {markers.get(key)?.map((number, order) => (
+                      <span
+                        key={number}
+                        className="pointer-events-none absolute -top-[3px] flex items-center justify-center rounded-full bg-neutral-900 font-bold text-white"
+                        style={{
+                          left: `${-3 + order * 9}px`,
+                          width: "13px",
+                          height: "13px",
+                          fontSize: "9px",
+                          lineHeight: "13px",
+                        }}
+                      >
+                        {number}
+                      </span>
+                    ))}
 
                     {isTarget ? (
                       <span className="pointer-events-none absolute top-0 -right-px h-full w-[2px] bg-sky-600" />

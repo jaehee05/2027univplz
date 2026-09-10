@@ -21,6 +21,15 @@ export function PrintSheet({
   label?: string;
   comments?: InlineComment[];
 }) {
+  // 화면과 같은 번호를 종이에도 붙인다 — 답안 순서대로 1번부터.
+  const marks = useMemo(
+    () =>
+      [...comments]
+        .sort((a, b) => a.start - b.start)
+        .map((comment, index) => ({ ...comment, index: index + 1 })),
+    [comments],
+  );
+
   const layout = useMemo(() => layoutManuscript(text, DEFAULT_SPEC), [text]);
   const rows = useMemo(() => {
     const planned = lengthRule
@@ -37,7 +46,7 @@ export function PrintSheet({
         layout={layout}
         lengthRule={lengthRule}
         label={label}
-        issues={comments}
+        issues={marks}
         cellSize={PRINT_CELL}
       />
     </div>

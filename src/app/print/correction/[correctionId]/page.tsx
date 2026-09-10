@@ -82,23 +82,30 @@ export default async function PrintCorrectionPage({
 
       <section className="print-page mt-6">
         <h2 className="text-sm font-bold">[코멘트]</h2>
+        <p className="text-xs text-neutral-500">
+          번호는 위 답안에 붙은 번호와 같습니다.
+        </p>
         <ol className="mt-2 space-y-2 text-sm">
-          {correction.inlineComments.map((comment, index) => (
-            <li key={index} className="print-block border-b border-neutral-200 pb-2">
-              <p className="font-medium">
-                {SEVERITY_MARK[comment.severity]} {comment.category} ·{" "}
-                {SEVERITY_LABEL[comment.severity]}
-                <span className="ml-2 font-normal text-neutral-500">
-                  {comment.start + 1}~{comment.end}자 — “
-                  {(answer?.text ?? "").slice(comment.start, comment.end)}”
+          {[...correction.inlineComments]
+            .sort((a, b) => a.start - b.start)
+            .map((comment, index) => (
+              <li key={index} className="print-block flex gap-2 border-b border-neutral-200 pb-2">
+                <span className="w-6 shrink-0 text-right font-bold">{index + 1}.</span>
+                <span>
+                  <span className="font-medium">
+                    {SEVERITY_MARK[comment.severity]} {comment.category} ·{" "}
+                    {SEVERITY_LABEL[comment.severity]}
+                    <span className="ml-2 font-normal text-neutral-500">
+                      “{(answer?.text ?? "").slice(comment.start, comment.end)}”
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block leading-6">{comment.message}</span>
+                  {comment.suggestion ? (
+                    <span className="mt-0.5 block leading-6">→ {comment.suggestion}</span>
+                  ) : null}
                 </span>
-              </p>
-              <p className="mt-0.5 leading-6">{comment.message}</p>
-              {comment.suggestion ? (
-                <p className="mt-0.5 leading-6">→ {comment.suggestion}</p>
-              ) : null}
-            </li>
-          ))}
+              </li>
+            ))}
         </ol>
       </section>
 
