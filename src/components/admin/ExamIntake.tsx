@@ -270,6 +270,24 @@ export function ExamIntake({ universities, fixedUnivId, onExams, onDone }: Props
   const selected = proposals.filter((row) => row.include).length;
   const done = files.filter((f) => f.status === "done" || f.status === "error").length;
 
+  /**
+   * 한 시험에 문제지는 하나, 해설도 하나다.
+   * 같은 자리를 두 자료가 노리면 등록하기 전에 알려 준다 — 그대로 두면 한쪽이 사라진다.
+   */
+  const clashes = new Map<string, Proposal[]>();
+  for (const row of proposals.filter((r) => r.include)) {
+    const slot = `${row.univId ?? ""}|${row.year}|${row.session ?? ""}|${row.kind}`;
+    clashes.set(slot, [...(clashes.get(slot) ?? []), row]);
+  }
+  const clashing = new Set(
+    [...clashes.values()]
+      .filter((rows) => rows.length > 1)
+      // 같은 파일에서 나뉘어 온 것은 등록할 때 한 덩어리로 합쳐지므로 문제가 아니다.
+      .filter((rows) => new Set(rows.map((r) => r.storagePath)).size > 1)
+      .flat()
+      .map((row) => row.key),
+  );
+
   return (
     <div>
       <div
@@ -355,9 +373,18 @@ export function ExamIntake({ universities, fixedUnivId, onExams, onDone }: Props
             </button>
           </div>
           <p className="mt-1 text-sm text-neutral-500">
-            자연계열은 자동으로 꺼 두었습니다. 대학 · 연도 · 이름 · 차수가 같으면 하나의 기출로
-            묶입니다.
+            자연계열은 자동으로 꺼 두었습니다. 대학 · 연도 · 차수가 같으면 하나의 기출로 묶이고,
+            한 시험에는 문제지 하나 · 해설 하나가 들어갑니다.
           </p>
+
+          {clashing.size > 0 ? (
+            <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              같은 시험의 같은 자리를 노리는 자료가 {clashing.size}개 있습니다(아래 노란 줄).
+              한 시험에 문제지는 하나뿐이라 이대로 등록하면 뒤엣것이 들어가지 않습니다.
+              정말 다른 시험이면 <b>차수</b>를 오전 · 오후처럼 다르게 적어 주시고,
+              같은 시험이면 하나만 남기고 체크를 풀어 주세요.
+            </p>
+          ) : null}
 
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[980px] text-sm">
@@ -375,7 +402,13 @@ export function ExamIntake({ universities, fixedUnivId, onExams, onDone }: Props
               </thead>
               <tbody className="divide-y divide-neutral-100">
                 {proposals.map((row) => (
-                  <tr key={row.key} className={row.include ? "" : "opacity-45"}>
+                  <tr
+                    key={row.key}
+                    className={[
+                      row.include ? "" : "opacity-45",
+                      clashing.has(row.key) ? "bg-amber-50" : "",
+                    ].join(" ")}
+                  >
                     <td className="py-2">
                       <input
                         type="checkbox"
@@ -478,8 +511,11 @@ export function ExamIntake({ universities, fixedUnivId, onExams, onDone }: Props
                       <input
                         value={row.session ?? ""}
                         onChange={(event) => patch(row.key, { session: event.target.value || null })}
-                        placeholder="—"
-                        className={cellInput}
+                        placeholder={clashing.has(row.key) ? "오전 / 오후" : "—"}
+                        className={[
+                          cellInput,
+                          clashing.has(row.key) ? "border-amber-400" : "",
+                        ].join(" ")}
                       />
                     </td>
                   </tr>

@@ -59,8 +59,54 @@ export async function POST(request: Request) {
 
   const touched = new Set<string>();
   const warnings: string[] = [];
+  /** 이번에 이미 채운 자리 — 한 시험의 문제지는 하나라서 두 번 채워지면 안 된다. */
+  const filled = new Map<string, { storagePath: string; pageFrom: number | null; pageTo: number | null }>();
 
+  /**
+   * 같은 시험의 같은 자리에 자료가 또 오면 덮어쓰지 않는다.
+   * 같은 파일이면 쪽 범위를 넓혀 하나로 합치고(한 문제지가 여러 덩어리로 잡힌 경우),
+   * 다른 파일이면 앞엣것을 지키고 알린다 — 덮어쓰면 앞 내용이 조용히 사라진다.
+   */
   for (const item of parsed.data.items) {
+    const slot = `${keyOf(item)}|${item.kind}`;
+    const already = filled.get(slot);
+    const label = item.kind === "question" ? "문제지" : "해설";
+    const where = `${known.get(item.univId)!.name} ${item.year}${item.session ? ` ${item.session}` : ""}`;
+
+    if (already) {
+      if (already.storagePath === item.storagePath) {
+        const merged = {
+          storagePath: already.storagePath,
+          pageFrom:
+            already.pageFrom === null || item.pageFrom === null
+              ? null
+              : Math.min(already.pageFrom, item.pageFrom),
+          pageTo:
+            already.pageTo === null || item.pageTo === null
+              ? null
+              : Math.max(already.pageTo, item.pageTo),
+        };
+        filled.set(slot, merged);
+        item.pageFrom = merged.pageFrom;
+        item.pageTo = merged.pageTo;
+        warnings.push(
+          `${where} ${label}: 같은 파일에서 나뉘어 온 자료를 ${merged.pageFrom ?? "처음"}~${merged.pageTo ?? "끝"}쪽 하나로 합쳤습니다.`,
+        );
+      } else {
+        warnings.push(
+          `${where} ${label}: ${item.fileName} 을 넣지 않았습니다. ` +
+            `한 시험에 ${label}는 하나라서 먼저 넣은 파일을 그대로 두었습니다. ` +
+            `정말 다른 시험이면 차수(오전·오후 등)를 다르게 적어 다시 올려 주세요.`,
+        );
+        continue;
+      }
+    }
+    filled.set(slot, {
+      storagePath: item.storagePath,
+      pageFrom: item.pageFrom,
+      pageTo: item.pageTo,
+    });
+
     const key = keyOf(item);
     let examId = byKey.get(key) ?? null;
 
@@ -86,10 +132,7 @@ export async function POST(request: Request) {
       continue;
     }
     if (snap.data()?.[`${item.kind}Pdf`]) {
-      const label = item.kind === "question" ? "문제" : "해설";
-      warnings.push(
-        `${known.get(item.univId)!.name} ${item.year} ${item.title} 의 ${label} 자리에 이미 파일이 있어 덮어썼습니다.`,
-      );
+      warnings.push(`${where} ${label} 자리에 이미 있던 파일을 새 것으로 바꿨습니다.`);
     }
 
     await ref.update({

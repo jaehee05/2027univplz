@@ -17,7 +17,8 @@
     "check:clova": "tsx scripts/check-clova.ts",
     "check:pdfbuf": "tsx scripts/check-pdf-buffer.ts",
     "check:pdfjs": "tsx scripts/check-pdfjs.ts",
-    "check:pagecount": "tsx scripts/check-pagecount.ts"
+    "check:pagecount": "tsx scripts/check-pagecount.ts",
+    "cleanup:test": "tsx scripts/cleanup-test-data.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
