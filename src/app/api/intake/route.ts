@@ -1,8 +1,10 @@
 import { z } from "zod";
 
+import { FieldValue } from "firebase-admin/firestore";
+
 import { apiTeacher } from "@/lib/auth/dal";
 import { classifyDocument } from "@/lib/anthropic/classify";
-import { adminBucket } from "@/lib/firebase/admin";
+import { adminBucket, adminDb } from "@/lib/firebase/admin";
 import { listUniversities } from "@/lib/exam/store";
 import { extractCached, isSupportedDocument, pageDigest } from "@/lib/docs/extract";
 
@@ -46,6 +48,23 @@ export async function POST(request: Request) {
       digest: pageDigest(document.pageTexts),
       universities: universities.map((univ) => ({ id: univ.id, name: univ.name })),
     });
+
+    // 올린 파일을 가려내는 데 토큰이 얼마나 드는지 남긴다.
+    await adminDb()
+      .collection("meta")
+      .doc("usage")
+      .set(
+        {
+          classify: {
+            calls: FieldValue.increment(1),
+            inputTokens: FieldValue.increment(result.usage.inputTokens),
+            outputTokens: FieldValue.increment(result.usage.outputTokens),
+            model: result.usage.model,
+          },
+        },
+        { merge: true },
+      )
+      .catch(() => undefined);
 
     return Response.json({
       file: { storagePath, fileName, size, pageCount: document.pageTexts.length },

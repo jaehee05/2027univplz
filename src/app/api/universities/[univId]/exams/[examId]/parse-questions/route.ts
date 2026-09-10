@@ -1,5 +1,7 @@
 import { apiTeacher } from "@/lib/auth/dal";
 import { parseQuestions } from "@/lib/anthropic/exam-analysis";
+import { FieldValue } from "firebase-admin/firestore";
+
 import {
   examRef,
   readExtractedText,
@@ -47,6 +49,12 @@ export async function POST(_request: Request, ctx: Ctx) {
       year: exam.year,
       examText,
     });
+
+    // 문제지 쪽에 토큰이 얼마나 드는지 나중에 볼 수 있게 남긴다.
+    await examRef(univId, examId)
+      .update({ parseUsage: { ...result.usage, at: FieldValue.serverTimestamp() } })
+      .catch(() => undefined);
+
     return Response.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "문항 파싱에 실패했습니다.";

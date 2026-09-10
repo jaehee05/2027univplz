@@ -38,6 +38,16 @@ export const serverEnv = {
   get extractionModel(): string {
     return process.env.ANTHROPIC_MODEL_EXTRACTION ?? "claude-haiku-4-5";
   },
+  /**
+   * 첨삭에서 생각에 얼마나 힘을 쓸지. 출력 토큰이 여기서 크게 갈린다.
+   * 비워 두면 모델이 알아서 정한다.
+   */
+  get correctionEffort(): "low" | "medium" | "high" | "xhigh" | "max" | undefined {
+    const raw = process.env.ANTHROPIC_EFFORT_CORRECTION;
+    return raw === "low" || raw === "medium" || raw === "high" || raw === "xhigh" || raw === "max"
+      ? raw
+      : undefined;
+  },
   /** 올린 파일이 무엇인지 가려내는 작업 — 여러 개를 동시에 돌리므로 빠른 모델을 쓴다 */
   get classifyModel(): string {
     return process.env.ANTHROPIC_MODEL_CLASSIFY ?? "claude-haiku-4-5";

@@ -94,15 +94,28 @@ export interface CorrectionResult {
   usage: CallUsage;
 }
 
-export async function correctAnswer(input: {
-  university: string;
-  examTitle: string;
-  question: Question;
-  analysis: Analysis;
-  answer: string;
-  charCount: number;
-  charCountNoSpace: number;
-}): Promise<CorrectionResult> {
+export interface CorrectionOptions {
+  /** 기본은 환경변수의 첨삭 모델 */
+  model?: string;
+  /**
+   * 생각에 얼마나 힘을 쓸지. 출력 토큰이 여기서 크게 갈린다.
+   * 없으면 환경변수 값을 쓰고, 그것도 없으면 모델이 알아서 정한다.
+   */
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+}
+
+export async function correctAnswer(
+  input: {
+    university: string;
+    examTitle: string;
+    question: Question;
+    analysis: Analysis;
+    answer: string;
+    charCount: number;
+    charCountNoSpace: number;
+  },
+  options: CorrectionOptions = {},
+): Promise<CorrectionResult> {
   // 학생은 문항 하나만 썼으므로 그 문항의 채점 기준만 쓴다.
   const rubricItems = rubricFor(input.analysis.rubric.items, input.question.number);
   if (rubricItems.length === 0) {
@@ -129,13 +142,18 @@ export async function correctAnswer(input: {
     charCountNoSpace: String(input.charCountNoSpace),
   });
 
-  const model = serverEnv.correctionModel;
+  const model = options.model ?? serverEnv.correctionModel;
+  const effort = options.effort ?? serverEnv.correctionEffort;
+
   const stream = anthropic().messages.stream({
     model,
     max_tokens: 32000,
     thinking: { type: "adaptive" },
     messages: [{ role: "user", content: prompt }],
-    output_config: { format: zodOutputFormat(correctionSchema) },
+    output_config: {
+      format: zodOutputFormat(correctionSchema),
+      ...(effort ? { effort } : {}),
+    },
   });
 
   const message = await stream.finalMessage();

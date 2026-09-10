@@ -23,7 +23,9 @@
     "check:crop": "tsx scripts/check-crop.ts",
     "smoke:practice": "tsx scripts/smoke-practice.ts",
     "check:print": "tsx scripts/check-print.ts",
-    "check:printfit": "tsx scripts/check-print-fit.ts"
+    "check:printfit": "tsx scripts/check-print-fit.ts",
+    "report:tokens": "tsx scripts/token-report.ts",
+    "bench:correction": "tsx --conditions=react-server scripts/bench-correction.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
