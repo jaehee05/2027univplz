@@ -16,8 +16,11 @@ export default async function PrintExamPage({ params }: PageProps<"/print/exam/[
         <ExamPaper assignment={assignment} question={question} />
       </div>
 
-      <div className="mt-10 print:mt-0">
-        <h2 className="mb-3 text-sm font-bold">[답안지]</h2>
+      {/* 문제지는 세로로 읽고, 원고지는 칸이 커야 하니 가로로 낸다. */}
+      <div className="print-landscape mt-10 print:mt-0">
+        <h2 className="mb-3 text-sm font-bold">
+          [답안지] {assignment.univName} {assignment.examTitle} {assignment.questionNumber}번
+        </h2>
         <PrintSheet
           lengthRule={lengthRuleOf(assignment)}
           label={`문제 ${assignment.questionNumber}`}

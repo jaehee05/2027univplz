@@ -10,7 +10,9 @@ export default async function PrintSheetPage({ params }: PageProps<"/print/sheet
     <PrintFrame
       title="빈 답안지"
       subtitle={`${assignment.univName} ${assignment.examTitle} ${assignment.questionNumber}번`}
+      wide
     >
+      <div className="print-landscape">
       <header className="mb-4 flex items-end justify-between border-b border-neutral-300 pb-2">
         <div>
           <p className="text-sm">
@@ -28,6 +30,7 @@ export default async function PrintSheetPage({ params }: PageProps<"/print/sheet
         lengthRule={lengthRuleOf(assignment)}
         label={`문제 ${assignment.questionNumber}`}
       />
+      </div>
     </PrintFrame>
   );
 }

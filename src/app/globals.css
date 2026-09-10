@@ -9,10 +9,21 @@ body {
 }
 
 /* ── 인쇄 (A4) ──────────────────────────────────────────────────────
-   화면과 같은 컴포넌트를 그대로 쓰되, 종이에 맞게 여백과 색만 손본다. */
+   화면과 같은 컴포넌트를 그대로 쓰되, 종이에 맞게 여백과 색만 손본다.
+   원고지는 38칸이라 세로로는 칸이 작아져서, 답안지·첨삭지는 가로로 낸다.
+   쪽마다 방향을 달리해야 해서 이름 붙인 @page 를 쓴다. */
 @page {
-  size: A4;
+  size: A4 portrait;
   margin: 15mm;
+}
+
+@page landscape {
+  size: A4 landscape;
+  margin: 12mm 14mm;
+}
+
+.print-landscape {
+  page: landscape;
 }
 
 @media print {
@@ -22,6 +33,12 @@ body {
     /* 원고지 칸의 옅은 색이 인쇄에서 날아가지 않게 한다. */
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  body {
+    /* 종이에서는 화면보다 조금 크게 — 손에 들고 읽는 글자 크기. */
+    font-size: 10.5pt;
+    line-height: 1.65;
   }
 
   /* 화면에서만 쓰는 것들 */
@@ -41,6 +58,25 @@ body {
 
   .print-page:last-child {
     break-after: auto;
+  }
+
+  /* 가로 쪽은 앞에서 한 번 끊어 준다 — 세로 쪽과 섞이므로. */
+  .print-landscape {
+    break-before: page;
+  }
+
+  .print-landscape:first-child {
+    break-before: auto;
+  }
+
+  /* 가로 쪽에서는 글이 너무 길게 늘어지지 않게 두 단으로 */
+  .print-columns {
+    columns: 2;
+    column-gap: 10mm;
+  }
+
+  .print-columns > * {
+    break-inside: avoid;
   }
 
   a {

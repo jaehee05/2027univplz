@@ -20,111 +20,133 @@ export default async function PrintCorrectionPage({
   });
 
   if (!correction) return null;
+
   const total = totalScore(correction.scores);
+  const earned = correction.scores.items.reduce((sum, item) => sum + item.awarded, 0);
+  const lost = correction.scores.deductions.reduce((sum, item) => sum + item.points, 0);
+  const text = answer?.text ?? "";
+
+  // 답안 순서대로 번호를 매긴다 — 원고지에 붙는 번호와 같다.
+  const comments = [...correction.inlineComments]
+    .sort((a, b) => a.start - b.start)
+    .map((comment, index) => ({ ...comment, index: index + 1 }));
 
   return (
     <PrintFrame
       title="첨삭 결과지"
       subtitle={`${assignment.studentName} · ${assignment.examTitle} ${assignment.questionNumber}번`}
+      wide
     >
-      <header className="flex items-end justify-between border-b-2 border-neutral-900 pb-2">
-        <div>
-          <p className="text-sm">
-            {assignment.univName} · {assignment.examTitle}
+      {/* ── 1쪽: 점수와 답안 ─────────────────────────────────── */}
+      <section className="print-landscape">
+        <header className="flex items-end justify-between border-b-2 border-neutral-900 pb-2">
+          <div>
+            <p className="text-sm">
+              {assignment.univName} · {assignment.examTitle}
+            </p>
+            <p className="text-base font-bold">
+              문제 {assignment.questionNumber}
+              {assignment.charTarget ? ` (${assignment.charTarget}자 내외)` : ""} ·{" "}
+              {assignment.studentName}
+              <span className="ml-2 font-normal text-neutral-500">
+                {answer?.charCount ?? 0}자
+              </span>
+            </p>
+          </div>
+          <p className="text-right">
+            <span className="text-3xl font-bold">{total}</span>
+            <span className="text-base"> / 100</span>
+            {lost > 0 ? (
+              <span className="block text-xs text-neutral-500">
+                {earned} − 감점 {lost}
+              </span>
+            ) : null}
           </p>
-          <p className="font-bold">
-            문제 {assignment.questionNumber}
-            {assignment.charTarget ? ` (${assignment.charTarget}자 내외)` : ""} ·{" "}
-            {assignment.studentName}
-          </p>
-        </div>
-        <p className="text-2xl font-bold">
-          {total}
-          <span className="text-base font-normal"> / 100</span>
-        </p>
-      </header>
+        </header>
 
-      <section className="print-block mt-5">
-        <h2 className="text-sm font-bold">[채점]</h2>
-        <table className="mt-2 w-full text-sm">
-          <tbody>
-            {correction.scores.items.map((item) => (
-              <tr key={item.id} className="border-b border-neutral-200 align-top">
-                <td className="w-44 py-1.5 font-medium">{item.name}</td>
-                <td className="w-16 py-1.5 text-right tabular-nums">
-                  {item.awarded} / {item.points}
-                </td>
-                <td className="py-1.5 pl-3 leading-6">{item.reason}</td>
-              </tr>
-            ))}
-            {correction.scores.deductions.map((deduction, index) => (
-              <tr key={`d${index}`} className="border-b border-neutral-200 align-top">
-                <td className="py-1.5 font-medium">{deduction.name}</td>
-                <td className="py-1.5 text-right tabular-nums">−{deduction.points}</td>
-                <td className="py-1.5 pl-3 leading-6">{deduction.reason}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="mt-3 flex gap-6">
+          {/* 왼쪽: 채점표 */}
+          <div className="w-[85mm] shrink-0">
+            <h2 className="text-sm font-bold">[채점]</h2>
+            <table className="mt-1 w-full text-xs">
+              <tbody>
+                {correction.scores.items.map((item) => (
+                  <tr key={item.id} className="border-b border-neutral-200 align-top">
+                    <td className="py-1 font-medium">{item.name}</td>
+                    <td className="w-14 py-1 text-right tabular-nums">
+                      {item.awarded} / {item.points}
+                    </td>
+                  </tr>
+                ))}
+                {correction.scores.deductions.map((deduction, index) => (
+                  <tr key={`d${index}`} className="border-b border-neutral-200 align-top">
+                    <td className="py-1">{deduction.name}</td>
+                    <td className="py-1 text-right tabular-nums">−{deduction.points}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 오른쪽: 답안 원고지 */}
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-bold">[답안] 번호는 뒷장 코멘트와 같습니다</h2>
+            <div className="mt-1">
+              <PrintSheet
+                text={text}
+                lengthRule={lengthRuleOf(assignment)}
+                label={`문제 ${assignment.questionNumber}`}
+                comments={correction.inlineComments}
+              />
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section className="mt-6">
-        <h2 className="text-sm font-bold">[답안]</h2>
-        <div className="mt-2">
-          <PrintSheet
-            text={answer?.text ?? ""}
-            lengthRule={lengthRuleOf(assignment)}
-            label={`문제 ${assignment.questionNumber}`}
-            comments={correction.inlineComments}
-          />
-        </div>
-      </section>
-
-      <section className="print-page mt-6">
-        <h2 className="text-sm font-bold">[코멘트]</h2>
-        <p className="text-xs text-neutral-500">
-          번호는 위 답안에 붙은 번호와 같습니다.
-        </p>
-        <ol className="mt-2 space-y-2 text-sm">
-          {[...correction.inlineComments]
-            .sort((a, b) => a.start - b.start)
-            .map((comment, index) => (
-              <li key={index} className="print-block flex gap-2 border-b border-neutral-200 pb-2">
-                <span className="w-6 shrink-0 text-right font-bold">{index + 1}.</span>
-                <span>
-                  <span className="font-medium">
-                    {SEVERITY_MARK[comment.severity]} {comment.category} ·{" "}
-                    {SEVERITY_LABEL[comment.severity]}
-                    <span className="ml-2 font-normal text-neutral-500">
-                      “{(answer?.text ?? "").slice(comment.start, comment.end)}”
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block leading-6">{comment.message}</span>
-                  {comment.suggestion ? (
-                    <span className="mt-0.5 block leading-6">→ {comment.suggestion}</span>
-                  ) : null}
+      {/* ── 2쪽: 코멘트 ──────────────────────────────────────── */}
+      <section className="print-landscape">
+        <h2 className="border-b border-neutral-400 pb-1 text-sm font-bold">
+          [코멘트] 번호는 앞장 답안에 붙은 번호와 같습니다
+        </h2>
+        <ol className="print-columns mt-2 text-xs">
+          {comments.map((comment) => (
+            <li key={comment.index} className="mb-2 flex gap-1.5 border-b border-neutral-200 pb-1.5">
+              <span className="w-5 shrink-0 text-right font-bold">{comment.index}.</span>
+              <span>
+                <span className="font-medium">
+                  {SEVERITY_MARK[comment.severity]} {comment.category} ·{" "}
+                  {SEVERITY_LABEL[comment.severity]}
                 </span>
-              </li>
-            ))}
+                <span className="mt-0.5 block border-l-2 border-neutral-300 pl-1.5 text-neutral-500 italic">
+                  “{text.slice(comment.start, comment.end)}”
+                </span>
+                <span className="mt-0.5 block leading-5">{comment.message}</span>
+                {comment.suggestion ? (
+                  <span className="mt-0.5 block leading-5">→ {comment.suggestion}</span>
+                ) : null}
+              </span>
+            </li>
+          ))}
         </ol>
       </section>
 
-      <section className="print-block mt-6">
-        <h2 className="text-sm font-bold">[총평]</h2>
-        <p className="mt-1 leading-7 whitespace-pre-wrap">{correction.overall.summary}</p>
+      {/* ── 3쪽: 총평과 고쳐 쓴 예시 ─────────────────────────── */}
+      <section className="print-landscape">
+        <h2 className="border-b border-neutral-400 pb-1 text-sm font-bold">[총평]</h2>
+        <p className="mt-2 leading-6 whitespace-pre-wrap">{correction.overall.summary}</p>
 
-        <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
-          <div>
+        <div className="mt-3 grid grid-cols-2 gap-6 text-xs">
+          <div className="print-block">
             <h3 className="font-bold">잘한 점</h3>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5 leading-6">
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 leading-5">
               {correction.overall.strengths.map((item, index) => (
                 <li key={index}>{item}</li>
               ))}
             </ul>
           </div>
-          <div>
+          <div className="print-block">
             <h3 className="font-bold">고칠 점</h3>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5 leading-6">
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 leading-5">
               {correction.overall.improvements.map((item, index) => (
                 <li key={index}>{item}</li>
               ))}
@@ -133,23 +155,30 @@ export default async function PrintCorrectionPage({
         </div>
 
         {correction.overall.nextSteps.length > 0 ? (
-          <div className="mt-3 border border-neutral-300 p-3 text-sm">
+          <div className="print-block mt-3 border border-neutral-400 p-2 text-xs">
             <h3 className="font-bold">다음 답안에서 바로 할 것</h3>
-            <ol className="mt-1 list-decimal space-y-0.5 pl-5 leading-6">
+            <ol className="mt-1 list-decimal space-y-0.5 pl-4 leading-5">
               {correction.overall.nextSteps.map((item, index) => (
                 <li key={index}>{item}</li>
               ))}
             </ol>
           </div>
         ) : null}
-      </section>
 
-      {correction.revisedExample ? (
-        <section className="print-block mt-6">
-          <h2 className="text-sm font-bold">[고쳐 쓴 예시]</h2>
-          <p className="mt-1 leading-8 whitespace-pre-wrap">{correction.revisedExample}</p>
-        </section>
-      ) : null}
+        {correction.revisedExample ? (
+          <div className="mt-4">
+            <h2 className="border-b border-neutral-400 pb-1 text-sm font-bold">
+              [고쳐 쓴 예시]
+              <span className="ml-2 font-normal text-neutral-500">
+                내가 쓴 답안의 논지를 살려 구성과 문장만 손본 것 · {correction.revisedExample.length}자
+              </span>
+            </h2>
+            <p className="print-columns mt-2 leading-6 break-keep whitespace-pre-wrap">
+              {correction.revisedExample}
+            </p>
+          </div>
+        ) : null}
+      </section>
     </PrintFrame>
   );
 }

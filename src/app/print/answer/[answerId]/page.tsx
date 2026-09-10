@@ -10,7 +10,9 @@ export default async function PrintAnswerPage({ params }: PageProps<"/print/answ
     <PrintFrame
       title="작성된 답안지"
       subtitle={`${assignment.studentName} · ${assignment.examTitle} ${assignment.questionNumber}번`}
+      wide
     >
+      <div className="print-landscape">
       <header className="mb-4 flex items-end justify-between border-b border-neutral-300 pb-2">
         <div>
           <p className="text-sm">
@@ -31,6 +33,7 @@ export default async function PrintAnswerPage({ params }: PageProps<"/print/answ
         lengthRule={lengthRuleOf(assignment)}
         label={`문제 ${assignment.questionNumber}`}
       />
+      </div>
     </PrintFrame>
   );
 }
