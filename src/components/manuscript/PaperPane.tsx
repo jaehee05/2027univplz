@@ -19,9 +19,8 @@ interface Props {
 export function PaperPane({ assignmentId, prompt, passages, hasPdf, pageFrom, pageTo }: Props) {
   const [mode, setMode] = useState<"pdf" | "text">(hasPdf ? "pdf" : "text");
 
-  // 브라우저 PDF 뷰어는 #page 로 시작 쪽을 잡을 수 있다.
-  const src =
-    `/api/assignments/${assignmentId}/paper` + (pageFrom && pageFrom > 1 ? `#page=${pageFrom}` : "");
+  // 서버가 배정된 쪽만 잘라서 내보내므로 여기서는 통째로 열면 된다.
+  const src = `/api/assignments/${assignmentId}/paper`;
 
   return (
     <section className="flex h-full min-h-0 flex-col">
@@ -29,8 +28,11 @@ export function PaperPane({ assignmentId, prompt, passages, hasPdf, pageFrom, pa
         <h2 className="text-sm font-semibold text-neutral-500">문제지</h2>
         <div className="flex items-center gap-2">
           {pageFrom || pageTo ? (
-            <span className="text-xs text-neutral-400">
-              {pageFrom ?? "처음"}~{pageTo ?? "끝"}쪽
+            <span
+              className="text-xs text-neutral-400"
+              title="원본 파일에서 이 시험이 차지하는 쪽입니다. 그 부분만 보입니다."
+            >
+              원본 {pageFrom ?? "처음"}~{pageTo ?? "끝"}쪽
             </span>
           ) : null}
           {hasPdf ? (

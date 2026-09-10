@@ -129,11 +129,8 @@ export async function DELETE(_request: Request, ctx: Ctx) {
     await Promise.all(
       [...new Set(mine)]
         .filter((path) => !stillUsed.has(path))
-        .flatMap((path) => [
-          bucket.file(path).delete().catch(() => undefined),
-          // 추출 결과 캐시도 함께 지운다.
-          bucket.file(`${path}.pages.json`).delete().catch(() => undefined),
-        ]),
+        // 원본과 함께 곁들여 둔 캐시(.pages.json · 쪽 잘라 둔 pdf)까지 이름 앞부분으로 지운다.
+        .map((path) => bucket.deleteFiles({ prefix: path }).catch(() => undefined)),
     );
   }
   // 하위 컬렉션(questions · extractions)까지 함께 지운다.

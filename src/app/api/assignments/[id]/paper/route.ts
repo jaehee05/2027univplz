@@ -1,5 +1,5 @@
 import { apiUser } from "@/lib/auth/dal";
-import { adminBucket } from "@/lib/firebase/admin";
+import { cropPdfPages } from "@/lib/docs/crop";
 import { examRef, toExam } from "@/lib/exam/store";
 import { assignmentRef, toAssignment } from "@/lib/work/store";
 
@@ -10,6 +10,9 @@ type Ctx = RouteContext<"/api/assignments/[id]/paper">;
  *
  * Storage 규칙은 teacher 만 읽게 막아 두었으므로(학생에게 전 대학 기출을 열 수는 없다),
  * 여기서 "이 과제의 학생인가"만 확인하고 서버가 대신 읽어 넘긴다.
+ *
+ * 한 파일에 문제지와 해설이 같이 든 경우가 많아, 파일을 통째로 내보내면
+ * 학생이 뒤로 넘겨 답을 볼 수 있다. 그래서 배정된 쪽만 잘라서 내보낸다.
  */
 export async function GET(request: Request, ctx: Ctx) {
   const auth = await apiUser();
@@ -50,8 +53,13 @@ export async function GET(request: Request, ctx: Ctx) {
   }
 
   try {
-    const [buffer] = await adminBucket().file(file.storagePath).download();
-    return new Response(new Uint8Array(buffer), {
+    // 선생님은 원본 전체를, 학생은 배정된 쪽만 본다.
+    const bytes =
+      auth.user.role === "teacher"
+        ? await cropPdfPages(file.storagePath, null, null)
+        : await cropPdfPages(file.storagePath, file.pageFrom, file.pageTo);
+
+    return new Response(new Uint8Array(bytes), {
       headers: {
         "Content-Type": "application/pdf",
         // 새로 올리기 전까지는 바뀌지 않는다.
@@ -59,7 +67,8 @@ export async function GET(request: Request, ctx: Ctx) {
         "Content-Disposition": `inline; filename="exam.pdf"`,
       },
     });
-  } catch {
-    return Response.json({ error: "파일을 읽지 못했습니다." }, { status: 502 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "파일을 읽지 못했습니다.";
+    return Response.json({ error: message }, { status: 502 });
   }
 }

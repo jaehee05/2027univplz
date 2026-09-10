@@ -26,10 +26,8 @@ async function main() {
       if (!TEST_TITLE.test(data.title ?? "")) continue;
       for (const key of ["questionPdf", "solutionPdf"] as const) {
         const path = data[key]?.storagePath;
-        if (path) {
-          await bucket.file(path).delete().catch(() => undefined);
-          await bucket.file(`${path}.pages.json`).delete().catch(() => undefined);
-        }
+        // 원본과 캐시(.pages.json · 쪽 잘라 둔 pdf)를 이름 앞부분으로 함께 지운다.
+        if (path) await bucket.deleteFiles({ prefix: path }).catch(() => undefined);
       }
       await db.recursiveDelete(exam.ref);
       await univ.ref.collection("analyses").doc(exam.id).delete().catch(() => undefined);
@@ -68,9 +66,10 @@ async function main() {
     }
   }
   for (const file of staged) {
-    if (referenced.has(file.name) || file.name.endsWith(".pages.json")) continue;
-    await file.delete().catch(() => undefined);
-    await bucket.file(`${file.name}.pages.json`).delete().catch(() => undefined);
+    // 캐시는 원본을 지울 때 같이 지워진다.
+    if (/\.(pages\.json|p\d+-\d+\.pdf)$/.test(file.name)) continue;
+    if (referenced.has(file.name)) continue;
+    await bucket.deleteFiles({ prefix: file.name }).catch(() => undefined);
     console.log(`남은 업로드 지움: ${file.name}`);
   }
 
