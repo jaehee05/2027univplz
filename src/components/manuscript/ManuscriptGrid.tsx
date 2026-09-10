@@ -75,6 +75,8 @@ export function ManuscriptGrid({
   cellSize = 22,
 }: ManuscriptGridProps) {
   const range = lengthRule ? lengthRange(lengthRule) : null;
+  // 번호 배지는 칸 크기를 따라간다 — 칸이 작아도 읽히고, 커도 글자를 덮지 않는다.
+  const badge = Math.max(11, Math.min(15, Math.round(cellSize * 0.62)));
 
   const filled = useMemo(() => {
     const map = new Map<string, Cell>();
@@ -249,13 +251,14 @@ export function ManuscriptGrid({
                     {markers.get(key)?.map((number, order) => (
                       <span
                         key={number}
-                        className="pointer-events-none absolute -top-[3px] flex items-center justify-center rounded-full bg-neutral-900 font-bold text-white"
+                        className="pointer-events-none absolute flex items-center justify-center rounded-full bg-neutral-900 font-bold text-white"
                         style={{
-                          left: `${-3 + order * 9}px`,
-                          width: "13px",
-                          height: "13px",
-                          fontSize: "9px",
-                          lineHeight: "13px",
+                          top: `${-badge / 3}px`,
+                          left: `${-badge / 3 + order * (badge * 0.7)}px`,
+                          width: `${badge}px`,
+                          height: `${badge}px`,
+                          fontSize: `${Math.round(badge * 0.68)}px`,
+                          lineHeight: `${badge}px`,
                         }}
                       >
                         {number}

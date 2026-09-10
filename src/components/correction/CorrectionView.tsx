@@ -213,7 +213,13 @@ export function CorrectionView({
           ))}
         </div>
 
-        <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,26rem)]">
+        {/* 원고지는 38칸이라 폭이 필요해서, 그때는 목록을 아래로 내린다. */}
+        <div
+          className={[
+            "mt-4 grid gap-5",
+            view === "prose" ? "xl:grid-cols-[minmax(0,1fr)_minmax(320px,26rem)]" : "",
+          ].join(" ")}
+        >
           <div ref={frameRef} className="min-w-0 rounded-lg border border-neutral-200 p-4">
             {view === "prose" ? (
               <AnswerProse
@@ -239,7 +245,15 @@ export function CorrectionView({
             )}
           </div>
 
-          <ul ref={listRef} className="space-y-2 xl:max-h-[70vh] xl:overflow-y-auto xl:pr-1">
+          <ul
+            ref={listRef}
+            className={[
+              "space-y-2",
+              view === "prose"
+                ? "xl:max-h-[70vh] xl:overflow-y-auto xl:pr-1"
+                : "sm:grid sm:grid-cols-2 sm:gap-2 sm:space-y-0 xl:grid-cols-3",
+            ].join(" ")}
+          >
             {shown.map((comment) => (
               <li key={comment.index} data-comment={comment.index}>
                 <button
