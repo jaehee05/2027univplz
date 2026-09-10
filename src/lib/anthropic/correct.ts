@@ -86,6 +86,37 @@ function sanitizeComments(comments: InlineComment[], text: string): InlineCommen
     .sort((a, b) => a.start - b.start);
 }
 
+/**
+ * 사람이 claude.ai 에서 받아 붙일 때는 글자 번호를 셀 수 없으므로 원문 조각(quote)을 받는다.
+ * 조각을 답안에서 찾아 위치로 바꾼다. 같은 말이 여러 번 나오면 앞에서부터 차례로 집는다.
+ */
+export function resolveQuotes(
+  comments: (Omit<InlineComment, "start" | "end"> & {
+    quote?: string;
+    start?: number;
+    end?: number;
+  })[],
+  text: string,
+): InlineComment[] {
+  let cursor = 0;
+
+  const resolved = comments.map((comment) => {
+    const quote = comment.quote?.trim();
+    if (quote) {
+      // 앞에서부터 찾되, 못 찾으면 처음부터 다시 훑는다.
+      let at = text.indexOf(quote, cursor);
+      if (at === -1) at = text.indexOf(quote);
+      if (at !== -1) {
+        cursor = at + quote.length;
+        return { ...comment, start: at, end: at + quote.length };
+      }
+    }
+    return { ...comment, start: comment.start ?? 0, end: comment.end ?? 0 };
+  });
+
+  return sanitizeComments(resolved as InlineComment[], text);
+}
+
 export interface CorrectionResult {
   scores: Correction["scores"];
   inlineComments: InlineComment[];
@@ -94,37 +125,38 @@ export interface CorrectionResult {
   usage: CallUsage;
 }
 
-export interface CorrectionOptions {
-  /** 기본은 환경변수의 첨삭 모델 */
-  model?: string;
-  /**
-   * 생각에 얼마나 힘을 쓸지. 출력 토큰이 여기서 크게 갈린다.
-   * 없으면 환경변수 값을 쓰고, 그것도 없으면 모델이 알아서 정한다.
-   */
-  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+export interface CorrectionInput {
+  university: string;
+  examTitle: string;
+  question: Question;
+  analysis: Analysis;
+  answer: string;
+  charCount: number;
+  charCountNoSpace: number;
 }
 
-export async function correctAnswer(
-  input: {
-    university: string;
-    examTitle: string;
-    question: Question;
-    analysis: Analysis;
-    answer: string;
-    charCount: number;
-    charCountNoSpace: number;
-  },
-  options: CorrectionOptions = {},
-): Promise<CorrectionResult> {
-  // 학생은 문항 하나만 썼으므로 그 문항의 채점 기준만 쓴다.
-  const rubricItems = rubricFor(input.analysis.rubric.items, input.question.number);
-  if (rubricItems.length === 0) {
+/** 이 문항을 채점할 때 쓸 기준 항목 */
+export function rubricItemsFor(input: CorrectionInput): RubricItem[] {
+  const items = rubricFor(input.analysis.rubric.items, input.question.number);
+  if (items.length === 0) {
     throw new Error(
       `${input.question.number}번 문항의 채점 기준이 없습니다. 기출 화면에서 채점 기준을 확인하세요.`,
     );
   }
+  return items;
+}
 
+/**
+ * 첨삭 프롬프트를 만든다.
+ * `manual` 이면 claude.ai 에 그대로 붙여 넣을 수 있게 JSON 형식 안내를 뒤에 붙인다.
+ */
+export async function buildCorrectionPrompt(
+  input: CorrectionInput,
+  options: { manual?: boolean } = {},
+): Promise<string> {
+  const items = rubricItemsFor(input);
   const template = await loadPrompt("correct");
+
   const prompt = fillPrompt(template, {
     university: input.university,
     examTitle: input.examTitle,
@@ -132,7 +164,7 @@ export async function correctAnswer(
     prompt: input.question.prompt,
     passages: renderPassages(input.question),
     lengthNote: renderLength(input.question),
-    rubric: renderRubric(input.analysis, rubricItems),
+    rubric: renderRubric(input.analysis, items),
     answerStyle:
       `구성: ${input.analysis.answerStyle.structure}\n문체: ${input.analysis.answerStyle.tone}\n` +
       `피할 것: ${input.analysis.answerStyle.avoid.join(" / ") || "(없음)"}`,
@@ -142,26 +174,34 @@ export async function correctAnswer(
     charCountNoSpace: String(input.charCountNoSpace),
   });
 
-  const model = options.model ?? serverEnv.correctionModel;
-  const effort = options.effort ?? serverEnv.correctionEffort;
+  if (!options.manual) return prompt;
 
-  const stream = anthropic().messages.stream({
-    model,
-    max_tokens: 32000,
-    thinking: { type: "adaptive" },
-    messages: [{ role: "user", content: prompt }],
-    output_config: {
-      format: zodOutputFormat(correctionSchema),
-      ...(effort ? { effort } : {}),
-    },
-  });
+  const tail = await loadPrompt("correct-manual");
+  return `${prompt}\n\n${fillPrompt(tail, {
+    ids: items.map((item) => `"${item.id}"(${item.name}, ${item.points}점)`).join(", "),
+  })}`;
+}
 
-  const message = await stream.finalMessage();
-  const parsed = message.parsed_output;
-  if (!parsed) throw new Error("첨삭 결과를 읽지 못했습니다.");
-
+/** 모델이 돌려준 결과를 확정 기준에 맞춰 다듬는다. API 로 받든 사람이 붙이든 같다. */
+export function normalizeCorrection(
+  parsed: {
+    scores: {
+      items: { id: string; name: string; points: number; awarded: number; reason: string }[];
+      deductions: { name: string; points: number; reason: string }[];
+    };
+    inlineComments: (Omit<InlineComment, "start" | "end"> & {
+      quote?: string;
+      start?: number;
+      end?: number;
+    })[];
+    overall: Correction["overall"];
+    revisedExample: string;
+  },
+  input: CorrectionInput,
+): Omit<CorrectionResult, "usage"> {
   // 배점은 확정 기준을 정본으로 삼는다. 모델이 바꿔 왔으면 되돌린다.
-  const byId = new Map(rubricItems.map((item) => [item.id, item]));
+  const byId = new Map(rubricItemsFor(input).map((item) => [item.id, item]));
+
   const items = parsed.scores.items.map((item) => {
     const source = byId.get(item.id);
     const points = source?.points ?? item.points;
@@ -185,9 +225,48 @@ export async function correctAnswer(
 
   return {
     scores: { items, deductions, total: Math.max(0, Math.round(earned - lost)) },
-    inlineComments: sanitizeComments(parsed.inlineComments, input.answer),
+    inlineComments: resolveQuotes(parsed.inlineComments, input.answer),
     overall: parsed.overall,
     revisedExample: parsed.revisedExample,
+  };
+}
+
+export interface CorrectionOptions {
+  /** 기본은 환경변수의 첨삭 모델 */
+  model?: string;
+  /**
+   * 생각에 얼마나 힘을 쓸지. 출력 토큰이 여기서 크게 갈린다.
+   * 없으면 환경변수 값을 쓰고, 그것도 없으면 모델이 알아서 정한다.
+   */
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+}
+
+export async function correctAnswer(
+  input: CorrectionInput,
+  options: CorrectionOptions = {},
+): Promise<CorrectionResult> {
+  const prompt = await buildCorrectionPrompt(input);
+
+  const model = options.model ?? serverEnv.correctionModel;
+  const effort = options.effort ?? serverEnv.correctionEffort;
+
+  const stream = anthropic().messages.stream({
+    model,
+    max_tokens: 32000,
+    thinking: { type: "adaptive" },
+    messages: [{ role: "user", content: prompt }],
+    output_config: {
+      format: zodOutputFormat(correctionSchema),
+      ...(effort ? { effort } : {}),
+    },
+  });
+
+  const message = await stream.finalMessage();
+  const parsed = message.parsed_output;
+  if (!parsed) throw new Error("첨삭 결과를 읽지 못했습니다.");
+
+  return {
+    ...normalizeCorrection(parsed, input),
     usage: {
       model,
       inputTokens: message.usage.input_tokens,

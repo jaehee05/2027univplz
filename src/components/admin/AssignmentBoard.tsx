@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { ManualCorrection } from "@/components/admin/ManualCorrection";
+
 import { ASSIGNMENT_LABEL, type Assignment, type Correction } from "@/lib/types/work";
 
 const STATUS_CLASS: Record<Assignment["status"], string> = {
@@ -23,6 +25,7 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
   const [rows, setRows] = useState<Assignment[]>(initial);
   const [filter, setFilter] = useState<"all" | "todo" | "done" | "mine">("all");
   const [running, setRunning] = useState<string | null>(null);
+  const [manual, setManual] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const shown = rows.filter((row) => {
@@ -132,7 +135,8 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
 
       <ul className="mt-3 divide-y divide-neutral-200 rounded-lg border border-neutral-200">
         {shown.map((row) => (
-          <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <li key={row.id} className="px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-medium">
@@ -163,14 +167,25 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
               ) : null}
 
               {row.status === "submitted" ? (
-                <button
-                  type="button"
-                  onClick={() => void correct(row)}
-                  disabled={running !== null}
-                  className="rounded-md bg-neutral-900 px-3 py-1.5 text-white disabled:opacity-40"
-                >
-                  {running === row.id ? "첨삭 중…" : "첨삭 돌리기"}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void correct(row)}
+                    disabled={running !== null}
+                    className="rounded-md bg-neutral-900 px-3 py-1.5 text-white disabled:opacity-40"
+                    title="Claude API 로 돌립니다. 답안 한 편에 요금이 듭니다."
+                  >
+                    {running === row.id ? "첨삭 중…" : "첨삭 돌리기"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManual(manual === row.id ? null : row.id)}
+                    className="rounded-md border border-neutral-300 px-3 py-1.5"
+                    title="프롬프트를 복사해 내 Claude 구독으로 돌리고 결과만 붙여 넣습니다. 요금이 들지 않습니다."
+                  >
+                    직접 첨삭
+                  </button>
+                </>
               ) : null}
 
               {row.correctionId &&
@@ -201,6 +216,24 @@ export function AssignmentBoard({ initial }: { initial: Assignment[] }) {
                 {row.selfPractice ? "지우기" : "회수"}
               </button>
             </div>
+            </div>
+
+            {manual === row.id ? (
+              <ManualCorrection
+                assignment={row}
+                onClose={() => setManual(null)}
+                onDone={(correction) => {
+                  setManual(null);
+                  setRows((prev) =>
+                    prev.map((item) =>
+                      item.id === row.id
+                        ? { ...item, status: "corrected", correctionId: correction.id }
+                        : item,
+                    ),
+                  );
+                }}
+              />
+            ) : null}
           </li>
         ))}
       </ul>
