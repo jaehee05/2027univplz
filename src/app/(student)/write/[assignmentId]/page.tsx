@@ -79,7 +79,7 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
       </header>
 
       {/* 왼쪽 문제지, 오른쪽 원고지. 원고지는 38칸이 들어갈 만큼만 차지한다. */}
-      <div className="grid min-h-0 flex-1 gap-5 pt-4 xl:grid-cols-[minmax(360px,1fr)_auto]">
+      <div className="grid min-h-0 flex-1 gap-5 pt-4 xl:grid-cols-[minmax(440px,1fr)_minmax(0,auto)]">
         <PaperPane
           assignmentId={assignment.id}
           prompt={assignment.questionPrompt}

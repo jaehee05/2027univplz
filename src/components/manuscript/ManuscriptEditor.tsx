@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { ManuscriptGrid } from "@/components/manuscript/ManuscriptGrid";
 import { layoutManuscript } from "@/lib/manuscript/layout";
@@ -21,6 +21,12 @@ interface ManuscriptEditorProps {
   readOnly?: boolean;
 }
 
+/** 칸 크기 한도 — 이보다 작아지면 글자가 안 읽혀서 가로 스크롤로 넘긴다. */
+const MIN_CELL = 15;
+const MAX_CELL = 22;
+/** 오른쪽 눈금과 좌우 안쪽 여백 */
+const TICK_GUTTER = 60;
+
 const SEVERITY_STYLE: Record<RuleIssue["severity"], string> = {
   error: "border-red-200 bg-red-50 text-red-800",
   warning: "border-amber-200 bg-amber-50 text-amber-900",
@@ -36,8 +42,32 @@ export function ManuscriptEditor({
   readOnly = false,
 }: ManuscriptEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const [caret, setCaret] = useState<number | null>(null);
   const [pendingCaret, setPendingCaret] = useState<number | null>(null);
+  const [cellSize, setCellSize] = useState(MAX_CELL);
+
+  /**
+   * 칸 크기를 남는 폭에 맞춘다.
+   * 문제지와 나란히 놓으면 원고지가 폭을 고정으로 차지해 문제지 칸이 지나치게 좁아진다.
+   * 좁으면 칸을 줄이고, 넓으면 원래 크기로 돌아간다. 더 줄일 수 없으면 가로로 스크롤한다.
+   */
+  useLayoutEffect(() => {
+    const node = frameRef.current;
+    if (!node) return;
+
+    const measure = () => {
+      // 오른쪽 누적 글자 수 눈금과 안쪽 여백만큼 뺀다.
+      const usable = node.clientWidth - TICK_GUTTER;
+      const fitted = Math.floor(usable / spec.cols);
+      setCellSize(Math.max(MIN_CELL, Math.min(MAX_CELL, fitted)));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [spec.cols]);
 
   const layout = useMemo(() => layoutManuscript(value, spec), [value, spec]);
   const issues = useMemo(
@@ -99,7 +129,7 @@ export function ManuscriptEditor({
     <div className="flex flex-col gap-4">
       {counts}
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-3">
+      <div ref={frameRef} className="rounded-lg border border-neutral-200 bg-white p-3">
         <ManuscriptGrid
           spec={spec}
           rows={rows}
@@ -108,6 +138,7 @@ export function ManuscriptEditor({
           label={label}
           caretOffset={caret}
           issues={issues}
+          cellSize={cellSize}
           onCellSelect={readOnly ? undefined : (offset) => setPendingCaret(offset)}
         />
       </div>
