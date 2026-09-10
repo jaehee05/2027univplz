@@ -4,7 +4,8 @@ import { adminBucket } from "@/lib/firebase/admin";
 import { extractHwpx } from "@/lib/docs/hwpx";
 import { installPdfjsGlobals } from "@/lib/docs/pdfjs-globals";
 import { countPdfPages } from "@/lib/docs/page-count";
-import { isClovaConfigured, ocrWithClova } from "@/lib/docs/clova";
+import { CLOVA_MAX_PAGES, isClovaConfigured, ocrWithClova } from "@/lib/docs/clova";
+import { splitPdf } from "@/lib/docs/crop";
 import type { ExtractionMethod } from "@/lib/types/exam";
 
 /** 올릴 수 있는 파일 형식. zip 은 브라우저에서 풀어 이 둘만 올라온다. */
@@ -77,9 +78,18 @@ async function extractPdf(data: Uint8Array, label: string): Promise<ExtractedDoc
 
   if (isClovaConfigured()) {
     try {
-      // 뒷부분이 잘려 와도 모르고 넘어가지 않도록 원본 쪽 수를 미리 센다.
-      // 세지 못하면 0 이고, 그때는 검사를 건너뛴다.
-      const pages = await ocrWithClova(data, label, countPdfPages(data) || undefined);
+      // CLOVA 는 한 번에 10쪽까지만 받는다. 더 길면 나눠 보내고 이어 붙인다.
+      const chunks = await splitPdf(data, CLOVA_MAX_PAGES);
+
+      const pages: string[] = [];
+      for (const [index, chunk] of chunks.entries()) {
+        // 뒷부분이 잘려 와도 모르고 넘어가지 않도록 조각의 쪽 수를 미리 센다.
+        // 세지 못하면 0 이고, 그때는 검사를 건너뛴다.
+        const expected = countPdfPages(chunk) || undefined;
+        const name = chunks.length > 1 ? `${label} (${index + 1}/${chunks.length})` : label;
+        pages.push(...(await ocrWithClova(chunk, name, expected)));
+      }
+
       const total = pages.join("").length;
       if (total > 0) {
         const blank = pages.filter((page) => page.length === 0).length;
@@ -88,6 +98,7 @@ async function extractPdf(data: Uint8Array, label: string): Promise<ExtractedDoc
           pageTexts: pages,
           note:
             `CLOVA OCR 로 읽었습니다 (${pages.length}쪽 · ${total}자` +
+            `${chunks.length > 1 ? ` · ${chunks.length}번에 나눠 보냄` : ""}` +
             `${blank > 0 ? ` · 글자 없는 쪽 ${blank}개` : ""}).`,
         };
       }

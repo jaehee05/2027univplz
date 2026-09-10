@@ -15,6 +15,36 @@ function cachePath(storagePath: string, from: number, to: number): string {
   return `${storagePath}.p${from}-${to}.pdf`;
 }
 
+/**
+ * PDF 를 쪽 수 단위로 잘라 여러 개로 나눈다.
+ * CLOVA OCR 이 한 번에 10쪽까지만 받아서, 그보다 긴 문서는 나눠 보내야 한다.
+ * 읽지 못하는 PDF 면 원본 하나만 돌려준다 — 부르는 쪽에서 그대로 시도하게 둔다.
+ */
+export async function splitPdf(data: Uint8Array, pagesPerChunk: number): Promise<Uint8Array[]> {
+  let source: PDFDocument;
+  try {
+    source = await PDFDocument.load(data, { ignoreEncryption: true });
+  } catch {
+    return [data];
+  }
+
+  const total = source.getPageCount();
+  if (total <= pagesPerChunk) return [data];
+
+  const chunks: Uint8Array[] = [];
+  for (let from = 0; from < total; from += pagesPerChunk) {
+    const part = await PDFDocument.create();
+    const indices = Array.from(
+      { length: Math.min(pagesPerChunk, total - from) },
+      (_, i) => from + i,
+    );
+    const pages = await part.copyPages(source, indices);
+    for (const page of pages) part.addPage(page);
+    chunks.push(await part.save());
+  }
+  return chunks;
+}
+
 export async function cropPdfPages(
   storagePath: string,
   pageFrom: number | null,

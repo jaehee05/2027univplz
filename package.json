@@ -28,7 +28,8 @@
     "bench:correction": "tsx --conditions=react-server scripts/bench-correction.ts",
     "smoke:manual": "tsx scripts/smoke-manual.ts",
     "check:quote": "tsx --conditions=react-server scripts/check-quote.ts",
-    "show:prompt": "tsx scripts/show-prompt.ts"
+    "show:prompt": "tsx scripts/show-prompt.ts",
+    "check:split": "tsx --conditions=react-server scripts/check-split.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

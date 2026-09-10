@@ -20,6 +20,9 @@ import { serverEnv } from "@/lib/env";
 /** OCR 응답을 기다리는 한도. 닿지 않는 주소에서 오래 붙잡히지 않게 한다. */
 const TIMEOUT_MS = 60_000;
 
+/** CLOVA 가 한 번에 받는 쪽 수. 이보다 길면 나눠 보내야 한다. */
+export const CLOVA_MAX_PAGES = 10;
+
 interface ClovaField {
   inferText?: string;
   /** 이 글자 뒤에서 줄이 바뀌는지 */
