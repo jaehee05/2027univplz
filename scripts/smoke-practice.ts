@@ -131,6 +131,12 @@ async function main() {
   );
 
   console.log("\n✔ 선생님 직접 풀이 통과");
+
+  // KEEP=1 로 돌리면 눈으로 보려고 남겨 둔다.
+  if (process.env.KEEP) {
+    console.log(`  결과 화면: ${BASE}/admin/corrections/${correction.id}`);
+    return;
+  }
   console.log("▶ 정리");
   await api(`/api/assignments/${assignment.id}`, { method: "DELETE" });
   console.log("  지웠습니다.");

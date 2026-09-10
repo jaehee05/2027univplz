@@ -169,7 +169,7 @@ export function ManuscriptGrid({
             <div key={row} className="flex">
               {row === 0 && spec.labelCells > 0 ? (
                 <div
-                  className="flex items-center justify-center border-r border-b border-sky-200 font-medium text-sky-700"
+                  className="flex shrink-0 items-center justify-center border-r border-b border-sky-200 font-medium text-sky-700"
                   style={{
                     width: `calc(var(--cell) * ${spec.labelCells})`,
                     height: "var(--cell)",
@@ -204,7 +204,8 @@ export function ManuscriptGrid({
                       onCellSelect?.(slot.cell ? slot.cell.start : (layout.cells.at(-1)?.end ?? 0));
                     }}
                     className={[
-                      "relative flex items-center justify-center border-sky-200 leading-none",
+                      // shrink-0 — 좁은 자리에 넣으면 칸이 눌려 글자가 어긋난다. 대신 가로로 스크롤한다.
+                      "relative flex shrink-0 items-center justify-center border-sky-200 leading-none",
                       isLastCol ? "" : "border-r",
                       row === lastRow ? "" : "border-b",
                       mark ? MARK_CLASS[mark] : overLimit ? "bg-red-50" : "bg-transparent",

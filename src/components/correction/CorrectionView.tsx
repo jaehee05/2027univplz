@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AnswerProse } from "@/components/correction/AnswerProse";
 import { ManuscriptGrid } from "@/components/manuscript/ManuscriptGrid";
+import { useFittedCellSize } from "@/components/manuscript/useFittedCellSize";
 import { layoutManuscript } from "@/lib/manuscript/layout";
 import { DEFAULT_SPEC, planRows, type LengthRule } from "@/lib/manuscript/spec";
 import { SEVERITY_LABEL, totalScore, type Correction, type InlineComment } from "@/lib/types/work";
@@ -41,6 +42,8 @@ export function CorrectionView({
   const [view, setView] = useState<"prose" | "grid">("prose");
   const [only, setOnly] = useState<Severity | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const cellSize = useFittedCellSize(frameRef, DEFAULT_SPEC.cols);
 
   // 답안 순서대로 1번부터 번호를 매긴다. 원고지·줄글·목록이 같은 번호를 쓴다.
   const comments = useMemo(
@@ -211,7 +214,7 @@ export function CorrectionView({
         </div>
 
         <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,26rem)]">
-          <div className="min-w-0 rounded-lg border border-neutral-200 p-4">
+          <div ref={frameRef} className="min-w-0 rounded-lg border border-neutral-200 p-4">
             {view === "prose" ? (
               <AnswerProse
                 text={answerText}
@@ -229,6 +232,7 @@ export function CorrectionView({
                   label={label}
                   issues={comments}
                   activeRange={activeComment}
+                  cellSize={cellSize}
                   onMarkSelect={(index) => setActive(index === active ? null : index)}
                 />
               </div>
