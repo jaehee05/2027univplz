@@ -21,7 +21,8 @@
     "cleanup:test": "tsx scripts/cleanup-test-data.ts",
     "setup:demo": "tsx scripts/setup-demo.ts",
     "check:crop": "tsx scripts/check-crop.ts",
-    "smoke:practice": "tsx scripts/smoke-practice.ts"
+    "smoke:practice": "tsx scripts/smoke-practice.ts",
+    "check:print": "tsx scripts/check-print.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

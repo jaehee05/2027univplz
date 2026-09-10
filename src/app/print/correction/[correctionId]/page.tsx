@@ -64,41 +64,47 @@ export default async function PrintCorrectionPage({
           </p>
         </header>
 
-        <div className="mt-3 flex gap-6">
-          {/* 왼쪽: 채점표 */}
-          <div className="w-[85mm] shrink-0">
-            <h2 className="text-sm font-bold">[채점]</h2>
-            <table className="mt-1 w-full text-xs">
-              <tbody>
-                {correction.scores.items.map((item) => (
-                  <tr key={item.id} className="border-b border-neutral-200 align-top">
-                    <td className="py-1 font-medium">{item.name}</td>
-                    <td className="w-14 py-1 text-right tabular-nums">
-                      {item.awarded} / {item.points}
-                    </td>
-                  </tr>
-                ))}
-                {correction.scores.deductions.map((deduction, index) => (
-                  <tr key={`d${index}`} className="border-b border-neutral-200 align-top">
-                    <td className="py-1">{deduction.name}</td>
-                    <td className="py-1 text-right tabular-nums">−{deduction.points}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* 채점표를 위로 올린다. 원고지는 38칸 × 26px = 261mm 라 가로 폭을 통째로 써야 안 잘린다. */}
+        <div className="mt-2">
+          <h2 className="text-sm font-bold">[채점]</h2>
+          <div className="mt-1 grid grid-cols-3 gap-x-6 text-xs">
+            {correction.scores.items.map((item) => (
+              <div
+                key={item.id}
+                className="print-block flex justify-between gap-2 border-b border-neutral-200 py-0.5"
+              >
+                <span className="font-medium">{item.name}</span>
+                <span className="shrink-0 tabular-nums">
+                  {item.awarded} / {item.points}
+                </span>
+              </div>
+            ))}
+            {correction.scores.deductions.map((deduction, index) => (
+              <div
+                key={`d${index}`}
+                className="print-block flex justify-between gap-2 border-b border-neutral-200 py-0.5"
+              >
+                <span>{deduction.name}</span>
+                <span className="shrink-0 tabular-nums">−{deduction.points}</span>
+              </div>
+            ))}
           </div>
+        </div>
 
-          {/* 오른쪽: 답안 원고지 */}
-          <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-bold">[답안] 번호는 뒷장 코멘트와 같습니다</h2>
-            <div className="mt-1">
-              <PrintSheet
-                text={text}
-                lengthRule={lengthRuleOf(assignment)}
-                label={`문제 ${assignment.questionNumber}`}
-                comments={correction.inlineComments}
-              />
-            </div>
+        <div className="mt-3">
+          <h2 className="text-sm font-bold">
+            [답안]
+            <span className="ml-2 font-normal text-neutral-500">
+              번호는 뒷장 코멘트와 같습니다
+            </span>
+          </h2>
+          <div className="mt-1">
+            <PrintSheet
+              text={text}
+              lengthRule={lengthRuleOf(assignment)}
+              label={`문제 ${assignment.questionNumber}`}
+              comments={correction.inlineComments}
+            />
           </div>
         </div>
       </section>
