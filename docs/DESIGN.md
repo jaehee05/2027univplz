@@ -177,10 +177,13 @@ PATCH  /api/corrections/[id]             점수·코멘트 수정 · 공개 (tea
 | `npm run check:pdfbuf` | pdfjs 가 원본 버퍼를 가져가지 않는지 — 같은 파일을 OCR 로 다시 보낼 수 있어야 한다 |
 | `npm run check:pdfjs` | 폴백 경로(pdfjs)가 브라우저 전역 없이도 뜨는지 |
 | `npm run check:pagecount` | 원본 바이트로 PDF 쪽 수를 세는지 — OCR 응답이 잘렸는지 가리는 데 쓴다 |
+| `npm run check:crop` | 학생에게 배정된 쪽만 나가는지 — 같은 파일의 해설 쪽이 딸려 나가면 안 된다 |
 | `npm run check:clova` | CLOVA OCR 연동 확인. 내부 전용 주소면 먼저 걸러 준다. 실제 호출이라 요금이 든다 |
 | `npm run smoke:stage3` | dev 서버를 켠 채 추출 → 문항 파싱 → 채점 기준 분석 → 확정까지 |
 | `npm run smoke:intake` | 인문·자연, 문제·해설이 섞인 PDF·HWPX 를 대학까지 알아내 기출로 묶는지 |
 | `npm run smoke:full` | **전 과정** — 기출 등록 → 기준 확정 → 학생 가입 → 배정 → 작성·제출 → 첨삭 → 공개 → 학생 확인 → 인쇄 4종 |
+| `npm run smoke:practice` | 선생님이 자기에게 과제를 내서 직접 풀고 첨삭까지 돌리는 흐름 |
+| `npm run setup:demo` · `npm run cleanup:test` | 눈으로 확인할 데이터 만들기 · 점검 데이터 정리 |
 | `npm run time:pages` | 로그인한 상태에서 관리 화면 응답 시간 측정 |
 
 smoke 계열은 Claude API 를 실제로 호출하고, 만든 데이터는 끝나고 지운다.

@@ -20,7 +20,8 @@
     "check:pagecount": "tsx scripts/check-pagecount.ts",
     "cleanup:test": "tsx scripts/cleanup-test-data.ts",
     "setup:demo": "tsx scripts/setup-demo.ts",
-    "check:crop": "tsx scripts/check-crop.ts"
+    "check:crop": "tsx scripts/check-crop.ts",
+    "smoke:practice": "tsx scripts/smoke-practice.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

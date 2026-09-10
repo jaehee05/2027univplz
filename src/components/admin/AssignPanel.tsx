@@ -81,8 +81,8 @@ export function AssignPanel({
       const data = await send([teacherUid]);
       setResult(
         data!.created > 0
-          ? "내 과제로 넣었습니다. 아래 '과제 · 첨삭' 에서 풀 수 있습니다."
-          : "이미 내 과제에 있습니다. '과제 · 첨삭' 에서 이어 쓰세요.",
+          ? "내 과제로 넣었습니다. '과제 · 첨삭' 에서 '내가 푼 것' 을 누르면 풀 수 있습니다."
+          : "이미 내 과제에 있습니다. '과제 · 첨삭' 에서 이어 쓰거나, 지우고 다시 넣으세요.",
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "실패했습니다.");
