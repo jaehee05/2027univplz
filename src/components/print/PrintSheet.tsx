@@ -9,10 +9,12 @@ import type { InlineComment } from "@/lib/types/work";
 
 /**
  * A4 한 쪽에 38칸이 들어가는 칸 크기.
- * 세로(좌우 15mm 여백, 폭 180mm)는 17px, 가로(폭 269mm)는 26px 까지 키울 수 있다.
+ * 눈금 칸까지 더한 전체 폭이 종이 안쪽에 들어와야 한다.
+ *   세로: 폭 180mm(=680px) → 38칸 × 17px + 눈금 50px = 696px … 조금 넘어 16px
+ *   가로: 폭 277mm(=1047px) → 38칸 × 25px + 눈금 50px = 1000px = 265mm
  */
-const PORTRAIT_CELL = 17;
-const LANDSCAPE_CELL = 26;
+const PORTRAIT_CELL = 16;
+const LANDSCAPE_CELL = 25;
 
 export function PrintSheet({
   text = "",
