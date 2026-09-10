@@ -25,7 +25,9 @@
     "check:print": "tsx scripts/check-print.ts",
     "check:printfit": "tsx scripts/check-print-fit.ts",
     "report:tokens": "tsx scripts/token-report.ts",
-    "bench:correction": "tsx --conditions=react-server scripts/bench-correction.ts"
+    "bench:correction": "tsx --conditions=react-server scripts/bench-correction.ts",
+    "smoke:manual": "tsx scripts/smoke-manual.ts",
+    "check:quote": "tsx --conditions=react-server scripts/check-quote.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

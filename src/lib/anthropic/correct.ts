@@ -100,15 +100,43 @@ export function resolveQuotes(
 ): InlineComment[] {
   let cursor = 0;
 
+  /**
+   * 공백만 다른 경우를 넘어가려고, 공백을 뺀 글자열에서 찾은 뒤 원래 위치로 되돌린다.
+   * 사람이 옮겨 적다 보면 줄바꿈이나 띄어쓰기가 곧잘 달라진다.
+   */
+  const bare: string[] = [];
+  const backIndex: number[] = [];
+  for (let i = 0; i < text.length; i += 1) {
+    if (!/\s/.test(text[i])) {
+      bare.push(text[i]);
+      backIndex.push(i);
+    }
+  }
+  const bareText = bare.join("");
+
+  function findLoosely(quote: string): { start: number; end: number } | null {
+    const needle = quote.replace(/\s+/g, "");
+    if (!needle) return null;
+    const at = bareText.indexOf(needle);
+    if (at === -1) return null;
+    return { start: backIndex[at], end: backIndex[at + needle.length - 1] + 1 };
+  }
+
   const resolved = comments.map((comment) => {
     const quote = comment.quote?.trim();
     if (quote) {
-      // 앞에서부터 찾되, 못 찾으면 처음부터 다시 훑는다.
+      // 앞에서부터 그대로 찾고, 없으면 처음부터, 그래도 없으면 공백을 무시하고 찾는다.
       let at = text.indexOf(quote, cursor);
       if (at === -1) at = text.indexOf(quote);
       if (at !== -1) {
         cursor = at + quote.length;
         return { ...comment, start: at, end: at + quote.length };
+      }
+
+      const loose = findLoosely(quote);
+      if (loose) {
+        cursor = loose.end;
+        return { ...comment, ...loose };
       }
     }
     return { ...comment, start: comment.start ?? 0, end: comment.end ?? 0 };

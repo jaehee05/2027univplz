@@ -60,6 +60,13 @@ export function ManualCorrection({
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "저장하지 못했습니다.");
+      if (data.asked > data.matched) {
+        // 자리를 못 찾은 코멘트는 버려진다. 조용히 넘어가면 왜 사라졌는지 알 수 없다.
+        alert(
+          `저장했습니다. 다만 코멘트 ${data.asked}개 중 ${data.asked - data.matched}개는 ` +
+            "답안에서 그 대목을 찾지 못해 빠졌습니다.",
+        );
+      }
       onDone(data.correction);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "저장하지 못했습니다.");
