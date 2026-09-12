@@ -4,9 +4,20 @@ import { useState } from "react";
 
 import type { Passage } from "@/lib/types/exam";
 
+/** 문제지에 실린 논제 하나 */
+export interface PaperQuestion {
+  questionId: string;
+  number: string;
+  prompt: string;
+}
+
 interface Props {
   assignmentId: string;
-  prompt: string;
+  /** 이 시험지의 논제 전부 */
+  questions: PaperQuestion[];
+  /** 지금 쓰고 있는 문항 — 그 논제를 도드라지게 한다 */
+  activeQuestionId: string | null;
+  /** 제시문. 여러 문항이 함께 쓰는 것은 한 번만 싣는다 */
   passages: Passage[];
   /** 문제지 PDF 가 있는지 — 없으면 글로만 보여 준다 */
   hasPdf: boolean;
@@ -20,7 +31,8 @@ interface Props {
 /** 왼쪽 문제지 칸. 올려 둔 PDF 를 그대로 띄우고, 필요하면 글로 바꿔 본다. */
 export function PaperPane({
   assignmentId,
-  prompt,
+  questions,
+  activeQuestionId,
   passages,
   hasPdf,
   pageFrom,
@@ -102,7 +114,32 @@ export function PaperPane({
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto rounded-md border border-neutral-200 p-4">
           <div>
             <h3 className="text-sm font-semibold text-neutral-500">논제</h3>
-            <p className="mt-1 leading-7 whitespace-pre-wrap">{prompt}</p>
+            <ol className="mt-1 space-y-3">
+              {questions.map((question) => {
+                const on = question.questionId === activeQuestionId;
+                return (
+                  <li
+                    key={question.questionId}
+                    className={[
+                      "rounded-md",
+                      on
+                        ? "bg-amber-50 px-2 py-1.5 ring-1 ring-amber-200"
+                        : questions.length > 1
+                          ? "px-2 py-1.5 text-neutral-500"
+                          : "",
+                    ].join(" ")}
+                  >
+                    {questions.length > 1 ? (
+                      <p className="text-sm font-bold">
+                        문제 {question.number}
+                        {on ? <span className="ml-1.5 font-normal text-amber-700">지금 쓰는 문항</span> : null}
+                      </p>
+                    ) : null}
+                    <p className="mt-0.5 leading-7 whitespace-pre-wrap">{question.prompt}</p>
+                  </li>
+                );
+              })}
+            </ol>
           </div>
 
           {passages.map((passage) => (

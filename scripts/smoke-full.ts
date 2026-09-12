@@ -31,6 +31,15 @@ const ANSWER = [
   "아니라, 이질적인 견해와 마주칠 수밖에 없는 자리를 제도적으로 만드는 데서 시작해야 한다.",
 ].join(" ");
 
+interface Correction {
+  questionId: string;
+  status: string;
+  error: string | null;
+  scores: { items: { awarded: number; points: number; name: string }[]; total: number };
+  inlineComments: { start: number; end: number }[];
+  revisedExample: string;
+}
+
 let teacherCookie = "";
 let studentCookie = "";
 
@@ -136,8 +145,12 @@ async function main() {
       method: "PUT",
       body: JSON.stringify({ questions: parsed.questions }),
     });
-    const question = saved.questions[0];
-    console.log(`  문항 ${saved.questions.length}개 · 첫 문항 ${question.number}번 ${question.charTarget}자`);
+    const examQuestions: { id: string; number: string; charTarget: number | null }[] =
+      saved.questions;
+    console.log(
+      `  문항 ${examQuestions.length}개 — ` +
+        examQuestions.map((q) => `${q.number}번 ${q.charTarget ?? "?"}자`).join(", "),
+    );
 
     step("채점 기준 분석 · 확정");
     await api(`/api/universities/${UNIV}/exams/${examId}/analyze`, { method: "POST" });
@@ -185,87 +198,122 @@ async function main() {
     );
     studentCookie = await sessionFor((await studentExchange.json()).idToken);
 
-    step("과제 배정");
+    step("과제 배정 — 시험지 통째로");
     const assigned = await api("/api/assignments", {
       method: "POST",
-      body: JSON.stringify({
-        studentIds: [studentUid],
-        univId: UNIV,
-        examId,
-        questionId: question.id,
-      }),
+      body: JSON.stringify({ studentIds: [studentUid], univId: UNIV, examId }),
     });
-    console.log(`  ${assigned.created}명에게 배정`);
+    console.log(`  ${assigned.created}명에게 문항 ${assigned.questionCount}개를 한꺼번에 배정`);
 
     step("학생이 답안 작성 · 제출");
     const mine = await api("/api/assignments", { as: "student" });
     const assignment = mine.assignments[0];
-    const opened = await api("/api/answers", {
-      as: "student",
-      method: "POST",
-      body: JSON.stringify({ assignmentId: assignment.id }),
-    });
-    await api(`/api/answers/${opened.answer.id}`, {
-      as: "student",
-      method: "PUT",
-      body: JSON.stringify({
-        text: ANSWER,
-        charCount: ANSWER.length,
-        charCountNoSpace: ANSWER.replace(/\s/g, "").length,
-      }),
-    });
-    await api(`/api/answers/${opened.answer.id}/submit`, { as: "student", method: "POST" });
-    console.log(`  ${ANSWER.length}자 제출`);
+    if (assignment.questions.length !== examQuestions.length) {
+      throw new Error(
+        `배정된 문항이 ${assignment.questions.length}개 — 시험지의 ${examQuestions.length}개와 다릅니다.`,
+      );
+    }
 
-    step("첨삭");
-    const started = await api("/api/corrections", {
+    // 문항마다 따로 쓴다. 제출은 시험지 단위라 하나라도 비면 막혀야 한다.
+    const opened: { id: string; questionId: string }[] = [];
+    for (const question of assignment.questions) {
+      const one = await api("/api/answers", {
+        as: "student",
+        method: "POST",
+        body: JSON.stringify({ assignmentId: assignment.id, questionId: question.questionId }),
+      });
+      opened.push({ id: one.answer.id, questionId: question.questionId });
+    }
+
+    if (assignment.questions.length > 1) {
+      const early = await fetch(`${BASE}/api/assignments/${assignment.id}/submit`, {
+        method: "POST",
+        headers: { cookie: studentCookie },
+      });
+      console.log(
+        `  안 쓴 문항이 있을 때 제출 ${early.status === 400 ? "막힘 ✓ (400)" : `열림 ✖ (${early.status})`}`,
+      );
+    }
+
+    for (const one of opened) {
+      await api(`/api/answers/${one.id}`, {
+        as: "student",
+        method: "PUT",
+        body: JSON.stringify({
+          text: ANSWER,
+          charCount: ANSWER.length,
+          charCountNoSpace: ANSWER.replace(/\s/g, "").length,
+        }),
+      });
+    }
+    await api(`/api/assignments/${assignment.id}/submit`, { as: "student", method: "POST" });
+    console.log(`  문항 ${opened.length}개 · 각 ${ANSWER.length}자 제출`);
+
+    step("첨삭 — 문항마다");
+    await api("/api/corrections", {
       method: "POST",
       body: JSON.stringify({ assignmentId: assignment.id }),
     });
     // 첨삭은 응답을 보낸 뒤에 이어서 돌아간다. 끝날 때까지 상태를 물어 본다.
     const beganAt = Date.now();
-    let correction = started.correction;
-    while (correction.status === "queued" || correction.status === "running") {
-      if (Date.now() - beganAt > 12 * 60 * 1000) throw new Error("첨삭이 12분 안에 안 끝났습니다.");
+    let corrections: Correction[] = [];
+    for (;;) {
+      corrections = (await api(`/api/assignments/${assignment.id}/corrections`)).corrections;
+      const failed = corrections.find((one) => one.status === "error");
+      if (failed) throw new Error(`첨삭 실패: ${failed.error}`);
+      if (
+        corrections.length === assignment.questions.length &&
+        corrections.every((one) => one.status === "done")
+      ) {
+        break;
+      }
+      if (Date.now() - beganAt > 20 * 60 * 1000) throw new Error("첨삭이 20분 안에 안 끝났습니다.");
       await new Promise((resolve) => setTimeout(resolve, 5000));
-      correction = (await api(`/api/corrections/${started.correction.id}`)).correction;
     }
-    if (correction.status !== "done") throw new Error(`첨삭 실패: ${correction.error}`);
     console.log(`  ${Math.round((Date.now() - beganAt) / 1000)}초 걸림`);
-    const total = correction.scores.items.reduce(
-      (sum: number, item: { awarded: number }) => sum + item.awarded,
-      0,
-    );
-    console.log(`  ${total}점 · 코멘트 ${correction.inlineComments.length}개 · ${correction.usage.model}`);
-    for (const item of correction.scores.items) {
-      console.log(`    ${item.awarded}/${item.points} ${item.name}`);
+
+    for (const correction of corrections) {
+      const number = assignment.questions.find(
+        (q: { questionId: string; number: string }) => q.questionId === correction.questionId,
+      )?.number;
+      const total = correction.scores.items.reduce(
+        (sum: number, item: { awarded: number }) => sum + item.awarded,
+        0,
+      );
+      const bad = correction.inlineComments.filter(
+        (c: { start: number; end: number }) => c.end > ANSWER.length || c.end <= c.start,
+      );
+      console.log(
+        `  ${number}번 ${total}점 · 코멘트 ${correction.inlineComments.length}개` +
+          ` (자리 ${bad.length === 0 ? "모두 답안 안쪽 ✓" : `${bad.length}개 벗어남 ✖`})` +
+          ` · 고쳐 쓴 예시 ${correction.revisedExample.length}자`,
+      );
     }
-    const bad = correction.inlineComments.filter(
-      (c: { start: number; end: number }) => c.end > ANSWER.length || c.end <= c.start,
-    );
-    console.log(`  코멘트 위치 ${bad.length === 0 ? "모두 답안 안쪽 ✓" : `${bad.length}개 벗어남 ✖`}`);
-    console.log(`  고쳐 쓴 예시 ${correction.revisedExample.length}자`);
 
     step("학생 화면 — 공개 전");
-    const blocked = await fetch(`${BASE}/api/corrections/${correction.id}`, {
+    const blocked = await fetch(`${BASE}/api/assignments/${assignment.id}/corrections`, {
       headers: { cookie: studentCookie },
     });
-    console.log(`  ${blocked.status === 403 ? "막힘 ✓ (403)" : `열림 ✖ (${blocked.status})`}`);
+    const hidden = (await blocked.json()).corrections ?? [];
+    console.log(`  ${hidden.length === 0 ? "안 보임 ✓" : `${hidden.length}개 보임 ✖`}`);
 
-    step("공개");
-    await api(`/api/corrections/${correction.id}`, {
-      method: "PATCH",
+    step("공개 — 시험지 단위");
+    await api(`/api/assignments/${assignment.id}/publish`, {
+      method: "POST",
       body: JSON.stringify({ published: true }),
     });
-    const visible = await api(`/api/corrections/${correction.id}`, { as: "student" });
-    console.log(`  학생이 ${visible.correction.scores.total}점 결과를 봄 ✓`);
+    const visible = await api(`/api/assignments/${assignment.id}/corrections`, { as: "student" });
+    console.log(
+      `  학생이 문항 ${visible.corrections.length}개 결과를 봄` +
+        ` (${visible.corrections.map((c: Correction) => `${c.scores.total}점`).join(", ")}) ✓`,
+    );
 
     step("인쇄 화면");
     for (const [label, path] of [
       ["문제지", `/print/exam/${assignment.id}`],
       ["빈 답안지", `/print/sheet/${assignment.id}`],
-      ["작성된 답안지", `/print/answer/${opened.answer.id}`],
-      ["첨삭 결과지", `/print/correction/${correction.id}`],
+      ["작성된 답안지", `/print/answer/${assignment.id}`],
+      ["첨삭 결과지", `/print/correction/${assignment.id}`],
     ] as const) {
       const response = await fetch(`${BASE}${path}`, { headers: { cookie: studentCookie } });
       console.log(`  ${label} ${response.ok ? "✓" : `✖ ${response.status}`}`);

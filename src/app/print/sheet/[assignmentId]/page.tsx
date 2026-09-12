@@ -1,36 +1,36 @@
 import { PrintFrame } from "@/components/print/PrintFrame";
 import { PrintSheet } from "@/components/print/PrintSheet";
-import { lengthRuleOf, loadForPrint } from "@/lib/work/print";
+import { loadForPrint } from "@/lib/work/print";
+import { lengthRuleOf } from "@/lib/work/store";
 
 export default async function PrintSheetPage({ params }: PageProps<"/print/sheet/[assignmentId]">) {
   const { assignmentId } = await params;
-  const { assignment } = await loadForPrint({ assignmentId });
+  const { assignment, rows } = await loadForPrint({ assignmentId });
 
   return (
     <PrintFrame
       title="빈 답안지"
-      subtitle={`${assignment.univName} ${assignment.examTitle} ${assignment.questionNumber}번`}
+      subtitle={`${assignment.univName} ${assignment.examTitle} · 문항 ${rows.length}개`}
       wide
     >
-      <div className="print-landscape">
-      <header className="mb-4 flex items-end justify-between border-b border-neutral-300 pb-2">
-        <div>
-          <p className="text-sm">
-            {assignment.univName} · {assignment.examTitle}
-          </p>
-          <p className="font-bold">
-            문제 {assignment.questionNumber}
-            {assignment.charTarget ? ` (${assignment.charTarget}자 내외)` : ""}
-          </p>
-        </div>
-        <p className="text-sm">이름 ____________</p>
-      </header>
+      {rows.map(({ question }) => (
+        <div key={question.questionId} className="print-landscape">
+          <header className="mb-4 flex items-end justify-between border-b border-neutral-300 pb-2">
+            <div>
+              <p className="text-sm">
+                {assignment.univName} · {assignment.examTitle}
+              </p>
+              <p className="font-bold">
+                문제 {question.number}
+                {question.charTarget ? ` (${question.charTarget}자 내외)` : ""}
+              </p>
+            </div>
+            <p className="text-sm">이름 ____________</p>
+          </header>
 
-      <PrintSheet
-        lengthRule={lengthRuleOf(assignment)}
-        label={`문제 ${assignment.questionNumber}`}
-      />
-      </div>
+          <PrintSheet lengthRule={lengthRuleOf(question)} label={`문제 ${question.number}`} />
+        </div>
+      ))}
     </PrintFrame>
   );
 }

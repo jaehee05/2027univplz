@@ -28,6 +28,25 @@ export interface StudentRow {
   submittedCount: number;
 }
 
+/** 과제에 복사해 둔 문항 하나. 기출을 나중에 고쳐도 이미 내준 과제는 그대로여야 한다. */
+export interface AssignmentQuestion {
+  questionId: string;
+  /** 문제지에 적힌 번호 그대로 */
+  number: string;
+  prompt: string;
+  charTarget: number | null;
+  tolerance: number;
+  /** 문제지가 범위를 못 박은 경우. 없으면 tolerance 로 계산한다. */
+  charMin: number | null;
+  charMax: number | null;
+  points: number | null;
+}
+
+/**
+ * 과제 하나 = 시험지 하나. 그 시험지의 문항을 전부 낸다.
+ * 답안과 첨삭은 문항마다 따로 있고(`answers` · `corrections` 의 questionId),
+ * 제출과 공개는 시험지 단위로 한꺼번에 한다.
+ */
 export interface Assignment {
   id: string;
   studentId: string;
@@ -36,29 +55,22 @@ export interface Assignment {
   univName: string;
   examId: string;
   examTitle: string;
-  questionId: string;
-  questionNumber: string;
-  /** 화면·첨삭에서 다시 조회하지 않도록 문항을 복사해 둔다.
-   *  기출을 나중에 고쳐도 이미 내준 과제의 조건은 그대로 남아야 한다. */
-  questionPrompt: string;
-  charTarget: number | null;
-  tolerance: number;
-  /** 문제지가 범위를 못 박은 경우. 없으면 tolerance 로 계산한다. */
-  charMin: number | null;
-  charMax: number | null;
+  /** 문제지에 실린 차례 그대로 */
+  questions: AssignmentQuestion[];
   assignedBy: string;
   /** 선생님이 자기에게 낸 연습 과제인지 */
   selfPractice: boolean;
   dueAt: string | null;
   status: AssignmentStatus;
-  answerId: string | null;
-  correctionId: string | null;
+  submittedAt: string | null;
   createdAt: string | null;
 }
 
 export interface Answer {
   id: string;
   assignmentId: string;
+  /** 이 답안이 어느 문항의 것인지 */
+  questionId: string;
   studentId: string;
   text: string;
   charCount: number;

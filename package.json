@@ -19,6 +19,7 @@
     "check:pdfjs": "tsx scripts/check-pdfjs.ts",
     "check:pagecount": "tsx scripts/check-pagecount.ts",
     "cleanup:test": "tsx scripts/cleanup-test-data.ts",
+    "migrate:assignments": "tsx scripts/migrate-exam-assignments.ts",
     "setup:demo": "tsx scripts/setup-demo.ts",
     "check:crop": "tsx scripts/check-crop.ts",
     "smoke:practice": "tsx scripts/smoke-practice.ts",
@@ -29,7 +30,8 @@
     "smoke:manual": "tsx scripts/smoke-manual.ts",
     "check:quote": "tsx --conditions=react-server scripts/check-quote.ts",
     "show:prompt": "tsx scripts/show-prompt.ts",
-    "check:split": "tsx --conditions=react-server scripts/check-split.ts"
+    "check:split": "tsx --conditions=react-server scripts/check-split.ts",
+    "check:pages": "tsx scripts/check-pages.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

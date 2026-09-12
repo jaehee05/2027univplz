@@ -112,14 +112,10 @@ async function main() {
     });
   }
 
+  // 과제 단위는 시험지다 — 이 기출의 문항이 전부 나간다.
   await api("/api/assignments", {
     method: "POST",
-    body: JSON.stringify({
-      studentIds: [uid],
-      univId: UNIV,
-      examId,
-      questionId: saved.questions[0].id,
-    }),
+    body: JSON.stringify({ studentIds: [uid], univId: UNIV, examId }),
   });
 
   const mine = await api("/api/assignments");

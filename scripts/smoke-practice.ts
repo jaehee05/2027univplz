@@ -51,11 +51,10 @@ async function main() {
   cookie = (session.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).join("; ");
   console.log(`▶ 선생님 ${uid}`);
 
-  // 확인용 기출의 첫 문항을 쓴다.
+  // 확인용 기출을 통째로 쓴다 — 과제 단위가 시험지이기 때문이다.
   const exams = await db.collection("universities").doc("ajou").collection("exams").get();
   const exam = exams.docs.find((d) => (d.data().title ?? "").includes("[확인용]"));
   if (!exam) throw new Error("확인용 기출이 없습니다. npm run setup:demo 를 먼저 돌리세요.");
-  const questionId = (await exam.ref.collection("questions").limit(1).get()).docs[0].id;
 
   // 첨삭은 확정된 채점 기준이 있어야 돈다.
   const analysis = await exam.ref.parent.parent!.collection("analyses").doc(exam.id).get();
@@ -83,13 +82,14 @@ async function main() {
   console.log("▶ 나에게 과제 내기");
   const assigned = await api("/api/assignments", {
     method: "POST",
-    body: JSON.stringify({ studentIds: [uid], univId: "ajou", examId: exam.id, questionId }),
+    body: JSON.stringify({ studentIds: [uid], univId: "ajou", examId: exam.id }),
   });
   const mine = assigned.assignments.filter(
     (a: { selfPractice: boolean; examId: string }) => a.selfPractice && a.examId === exam.id,
   );
   console.log(`  내 연습 과제 ${mine.length}건 (selfPractice=${mine[0]?.selfPractice})`);
   const assignment = mine[0];
+  console.log(`  문항 ${assignment.questions.length}개가 한 과제로 나감`);
 
   console.log("▶ 문제지 받기");
   const paper = await fetch(`${BASE}/api/assignments/${assignment.id}/paper`, {
@@ -97,44 +97,57 @@ async function main() {
   });
   console.log(`  ${paper.status} · ${paper.headers.get("content-type")} · ${Math.round(Number(paper.headers.get("content-length") ?? 0) / 1024)}KB`);
 
-  console.log("▶ 쓰고 제출");
-  const opened = await api("/api/answers", {
-    method: "POST",
-    body: JSON.stringify({ assignmentId: assignment.id }),
-  });
-  await api(`/api/answers/${opened.answer.id}`, {
-    method: "PUT",
-    body: JSON.stringify({
-      text: ANSWER,
-      charCount: ANSWER.length,
-      charCountNoSpace: ANSWER.replace(/\s/g, "").length,
-    }),
-  });
-  await api(`/api/answers/${opened.answer.id}/submit`, { method: "POST" });
-  console.log(`  ${ANSWER.length}자 제출`);
+  console.log("▶ 문항마다 쓰고, 시험지째 제출");
+  for (const question of assignment.questions as { questionId: string; number: string }[]) {
+    const opened = await api("/api/answers", {
+      method: "POST",
+      body: JSON.stringify({ assignmentId: assignment.id, questionId: question.questionId }),
+    });
+    await api(`/api/answers/${opened.answer.id}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        text: ANSWER,
+        charCount: ANSWER.length,
+        charCountNoSpace: ANSWER.replace(/\s/g, "").length,
+      }),
+    });
+  }
+  await api(`/api/assignments/${assignment.id}/submit`, { method: "POST" });
+  console.log(`  문항 ${assignment.questions.length}개 · 각 ${ANSWER.length}자 제출`);
 
   console.log("▶ 첨삭");
-  const started = await api("/api/corrections", {
+  await api("/api/corrections", {
     method: "POST",
     body: JSON.stringify({ assignmentId: assignment.id }),
   });
   const beganAt = Date.now();
-  let correction = started.correction;
-  while (correction.status === "queued" || correction.status === "running") {
-    if (Date.now() - beganAt > 12 * 60 * 1000) throw new Error("12분 안에 안 끝났습니다.");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let corrections: any[] = [];
+  for (;;) {
+    corrections = (await api(`/api/assignments/${assignment.id}/corrections`)).corrections;
+    const failed = corrections.find((one) => one.status === "error");
+    if (failed) throw new Error(`첨삭 실패: ${failed.error}`);
+    if (
+      corrections.length === assignment.questions.length &&
+      corrections.every((one) => one.status === "done")
+    ) {
+      break;
+    }
+    if (Date.now() - beganAt > 20 * 60 * 1000) throw new Error("20분 안에 안 끝났습니다.");
     await new Promise((r) => setTimeout(r, 5000));
-    correction = (await api(`/api/corrections/${started.correction.id}`)).correction;
   }
-  if (correction.status !== "done") throw new Error(`첨삭 실패: ${correction.error}`);
   console.log(
-    `  ${Math.round((Date.now() - beganAt) / 1000)}초 · ${correction.scores.total}점 · 코멘트 ${correction.inlineComments.length}개`,
+    `  ${Math.round((Date.now() - beganAt) / 1000)}초 · ` +
+      corrections
+        .map((one) => `${one.scores.total}점(코멘트 ${one.inlineComments.length})`)
+        .join(" · "),
   );
 
   console.log("\n✔ 선생님 직접 풀이 통과");
 
   // KEEP=1 로 돌리면 눈으로 보려고 남겨 둔다.
   if (process.env.KEEP) {
-    console.log(`  결과 화면: ${BASE}/admin/corrections/${correction.id}`);
+    console.log(`  결과 화면: ${BASE}/admin/corrections/${assignment.id}`);
     return;
   }
   console.log("▶ 정리");

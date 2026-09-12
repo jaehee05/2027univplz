@@ -24,7 +24,6 @@ export function AssignPanel({
   teacherUid,
 }: Props) {
   const active = students.filter((student) => student.active);
-  const [questionId, setQuestionId] = useState(questions[0]?.id ?? "");
   const [picked, setPicked] = useState<string[]>([]);
   const [dueAt, setDueAt] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,7 +34,8 @@ export function AssignPanel({
     const response = await fetch("/api/assignments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ studentIds, univId, examId, questionId, dueAt: dueAt || null }),
+      // 단위는 시험지다 — 이 기출의 문항이 전부 나간다.
+      body: JSON.stringify({ studentIds, univId, examId, dueAt: dueAt || null }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "배정에 실패했습니다.");
@@ -43,8 +43,8 @@ export function AssignPanel({
   }
 
   async function assign() {
-    if (!questionId || picked.length === 0) {
-      setError("문항과 학생을 고르세요.");
+    if (picked.length === 0) {
+      setError("학생을 고르세요.");
       return;
     }
     setBusy(true);
@@ -55,7 +55,7 @@ export function AssignPanel({
       setPicked([]);
       setResult(
         [
-          `${data!.created}명에게 내줬습니다.`,
+          `${data!.created}명에게 문항 ${questions.length}개를 통째로 내줬습니다.`,
           data!.skipped.length ? `이미 받은 학생은 건너뜀: ${data!.skipped.join(", ")}` : "",
         ]
           .filter(Boolean)
@@ -70,10 +70,6 @@ export function AssignPanel({
 
   /** 선생님이 직접 풀어 본다 — 학생과 같은 화면에서 쓰고 첨삭까지 돌려 볼 수 있다. */
   async function practice() {
-    if (!questionId) {
-      setError("문항을 고르세요.");
-      return;
-    }
     setBusy(true);
     setError(null);
     setResult(null);
@@ -81,7 +77,7 @@ export function AssignPanel({
       const data = await send([teacherUid]);
       setResult(
         data!.created > 0
-          ? "내 과제로 넣었습니다. '과제 · 첨삭' 에서 '내가 푼 것' 을 누르면 풀 수 있습니다."
+          ? `내 과제로 넣었습니다 (문항 ${questions.length}개). '과제 · 첨삭' 에서 '내가 푼 것' 을 누르면 풀 수 있습니다.`
           : "이미 내 과제에 있습니다. '과제 · 첨삭' 에서 이어 쓰거나, 지우고 다시 넣으세요.",
       );
     } catch (caught) {
@@ -106,30 +102,34 @@ export function AssignPanel({
             </p>
           ) : null}
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">
-              <span className="block text-xs text-neutral-500">문항</span>
-              <select
-                value={questionId}
-                onChange={(event) => setQuestionId(event.target.value)}
-                className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-              >
-                {questions.map((question) => (
-                  <option key={question.id} value={question.id}>
-                    {question.number}번
-                    {question.charTarget ? ` · ${question.charTarget}자` : ""} ·{" "}
-                    {question.prompt.slice(0, 30)}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+            <p className="text-xs text-neutral-500">
+              내주는 단위는 <b>시험지 한 벌</b>입니다. 아래 문항이 모두 함께 나가고, 학생은
+              전부 쓴 뒤 한꺼번에 냅니다.
+            </p>
+            <ul className="mt-2 space-y-1 text-sm">
+              {questions.map((question) => (
+                <li key={question.id} className="flex gap-2">
+                  <span className="w-10 shrink-0 font-medium">{question.number}번</span>
+                  <span className="text-neutral-500">
+                    {question.charTarget ? `${question.charTarget}자 내외` : "분량 조건 없음"}
+                  </span>
+                  <span className="truncate text-neutral-600">
+                    {question.prompt.slice(0, 40)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="mt-3">
             <label className="text-sm">
               <span className="block text-xs text-neutral-500">마감일 (없으면 비움)</span>
               <input
                 type="date"
                 value={dueAt}
                 onChange={(event) => setDueAt(event.target.value)}
-                className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                className="mt-1 w-full max-w-xs rounded-md border border-neutral-300 px-3 py-2 text-sm"
               />
             </label>
           </div>

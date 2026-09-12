@@ -3,29 +3,38 @@ import { notFound } from "next/navigation";
 
 import { requireTeacher } from "@/lib/auth/dal";
 import { CorrectionReview } from "@/components/correction/CorrectionReview";
+import type { SheetRow } from "@/components/correction/CorrectionSheets";
 import {
-  answerRef,
   assignmentRef,
-  correctionRef,
-  toAnswer,
+  lengthRuleOf,
+  listAnswersOf,
+  listCorrectionsOf,
   toAssignment,
-  toCorrection,
+  workRows,
 } from "@/lib/work/store";
 
-export default async function CorrectionPage({ params }: PageProps<"/admin/corrections/[id]">) {
+export default async function CorrectionPage({
+  params,
+}: PageProps<"/admin/corrections/[assignmentId]">) {
   await requireTeacher();
-  const { id } = await params;
+  const { assignmentId } = await params;
 
-  const snap = await correctionRef(id).get();
+  const snap = await assignmentRef(assignmentId).get();
   if (!snap.exists) notFound();
 
-  const correction = toCorrection(snap);
-  const [answerSnap, assignmentSnap] = await Promise.all([
-    answerRef(correction.answerId).get(),
-    assignmentRef(correction.assignmentId).get(),
+  const assignment = toAssignment(snap);
+  const [answerRows, correctionRows] = await Promise.all([
+    listAnswersOf(assignmentId),
+    listCorrectionsOf(assignmentId),
   ]);
-  const answer = answerSnap.exists ? toAnswer(answerSnap) : null;
-  const assignment = assignmentSnap.exists ? toAssignment(assignmentSnap) : null;
+
+  const rows: SheetRow[] = workRows(assignment, answerRows, correctionRows).map((row) => ({
+    questionId: row.question.questionId,
+    number: row.question.number,
+    lengthRule: lengthRuleOf(row.question),
+    answerText: row.answer?.text ?? "",
+    correction: row.correction,
+  }));
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
@@ -38,26 +47,17 @@ export default async function CorrectionPage({ params }: PageProps<"/admin/corre
 
       <header className="mt-3 pb-4">
         <p className="text-sm text-neutral-500">
-          {assignment?.univName} · {assignment?.examTitle} {assignment?.questionNumber}번
+          {assignment.univName} · {assignment.examTitle} · 문항 {rows.length}개
         </p>
-        <h1 className="mt-1 text-xl font-bold">{assignment?.studentName} 학생 답안 첨삭</h1>
+        <h1 className="mt-1 text-xl font-bold">
+          {assignment.selfPractice ? "내 연습 답안" : `${assignment.studentName} 학생 답안`} 첨삭
+        </h1>
       </header>
 
       <CorrectionReview
-        initial={correction}
-        answerText={answer?.text ?? ""}
-        studentName={assignment?.studentName ?? ""}
-        lengthRule={
-          assignment?.charTarget
-            ? {
-                target: assignment.charTarget,
-                tolerance: assignment.tolerance,
-                min: assignment.charMin,
-                max: assignment.charMax,
-              }
-            : null
-        }
-        label={assignment ? `문제 ${assignment.questionNumber}` : undefined}
+        assignmentId={assignment.id}
+        studentName={assignment.selfPractice ? "나 (연습)" : assignment.studentName}
+        initial={rows}
       />
     </main>
   );

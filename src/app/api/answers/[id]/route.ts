@@ -38,9 +38,13 @@ export async function PUT(request: Request, ctx: Ctx) {
 
   await answerRef(id).update({ ...parsed.data, updatedAt: FieldValue.serverTimestamp() });
 
-  // 처음 글자를 넣은 순간 과제 상태를 '쓰는 중' 으로 옮긴다.
+  // 어느 문항이든 처음 글자를 넣은 순간 시험지 상태를 '쓰는 중' 으로 옮긴다.
   const assignmentSnap = await assignmentRef(answer.assignmentId).get();
-  if (assignmentSnap.exists && toAssignment(assignmentSnap).status === "assigned") {
+  if (
+    assignmentSnap.exists &&
+    toAssignment(assignmentSnap).status === "assigned" &&
+    parsed.data.text.trim().length > 0
+  ) {
     await assignmentRef(answer.assignmentId).update({ status: "writing" });
   }
 

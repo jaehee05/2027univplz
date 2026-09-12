@@ -35,9 +35,11 @@ async function main() {
   if (!assignment) throw new Error("제출된 답안이 있는 과제가 없습니다.");
 
   const started = Date.now();
-  const response = await fetch(`${BASE}/api/corrections/prompt?assignmentId=${assignment.id}`, {
-    headers: { cookie },
-  });
+  const question = assignment.questions[0];
+  const response = await fetch(
+    `${BASE}/api/corrections/prompt?assignmentId=${assignment.id}&questionId=${question.questionId}`,
+    { headers: { cookie } },
+  );
   const data = await response.json();
   if (!response.ok) throw new Error(data.error);
 

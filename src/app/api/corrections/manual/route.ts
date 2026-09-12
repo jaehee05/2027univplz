@@ -5,7 +5,7 @@ import { apiTeacher } from "@/lib/auth/dal";
 import { normalizeCorrection } from "@/lib/anthropic/correct";
 import { extractJson } from "@/lib/anthropic/paste";
 import { loadCorrectionInput } from "@/lib/work/correction-input";
-import { assignmentRef, correctionRef, corrections, toCorrection } from "@/lib/work/store";
+import { correctionOf, correctionRef, corrections, refreshStatus, toCorrection } from "@/lib/work/store";
 
 const pastedSchema = z.object({
   scores: z.object({
@@ -48,11 +48,15 @@ const pastedSchema = z.object({
 
 const bodySchema = z.object({
   assignmentId: z.string().min(1).optional(),
+  questionId: z.string().min(1).optional(),
   /** claude.ai 에서 받은 답 그대로 */
   pasted: z.string().min(2).max(200_000),
 });
 
-/** 선생님이 자기 Claude 로 받은 첨삭 결과를 넣는다. API 를 쓰지 않는다. */
+/**
+ * 선생님이 자기 Claude 로 받은 첨삭 결과를 넣는다. API 를 쓰지 않는다.
+ * 답안 한 편이 단위이므로 문항을 지정해야 한다.
+ */
 export async function POST(request: Request) {
   const auth = await apiTeacher();
   if (!auth.ok) return auth.response;
@@ -62,14 +66,15 @@ export async function POST(request: Request) {
     return Response.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
 
-  // 공용 화면은 { pasted } 만 보내므로 과제는 주소에서도 받는다.
-  const assignmentId =
-    parsedBody.data.assignmentId ?? new URL(request.url).searchParams.get("assignmentId");
-  if (!assignmentId) {
-    return Response.json({ error: "과제를 지정해 주세요." }, { status: 400 });
+  // 공용 화면은 { pasted } 만 보내므로 과제 · 문항은 주소에서도 받는다.
+  const params = new URL(request.url).searchParams;
+  const assignmentId = parsedBody.data.assignmentId ?? params.get("assignmentId");
+  const questionId = parsedBody.data.questionId ?? params.get("questionId");
+  if (!assignmentId || !questionId) {
+    return Response.json({ error: "과제와 문항을 지정해 주세요." }, { status: 400 });
   }
 
-  const loaded = await loadCorrectionInput(assignmentId, auth.user.uid);
+  const loaded = await loadCorrectionInput(assignmentId, questionId, auth.user.uid);
   if (!loaded.ok) return Response.json({ error: loaded.error }, { status: loaded.status });
 
   let result;
@@ -126,16 +131,19 @@ export async function POST(request: Request) {
   }
 
   const { assignment } = loaded;
-  const ref = assignment.correctionId ? correctionRef(assignment.correctionId) : corrections().doc();
+  const existing = await correctionOf(assignment.id, questionId);
+  const ref = existing ? correctionRef(existing.id) : corrections().doc();
 
   await ref.set(
     {
       answerId: loaded.answer.id,
       assignmentId: assignment.id,
+      questionId,
       studentId: assignment.studentId,
+      // 선생님 목록 화면이 첨삭을 한 번에 읽을 수 있게 복사해 둔다.
+      assignedBy: assignment.assignedBy,
       univId: assignment.univId,
       examId: assignment.examId,
-      questionId: assignment.questionId,
       status: "done",
       ...result,
       // API 를 쓰지 않았으므로 토큰 기록은 없다.
@@ -150,7 +158,7 @@ export async function POST(request: Request) {
     },
     { merge: true },
   );
-  await assignmentRef(assignment.id).update({ status: "corrected", correctionId: ref.id });
+  await refreshStatus(assignment.id);
 
   return Response.json({
     correction: toCorrection(await ref.get()),

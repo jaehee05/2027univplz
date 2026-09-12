@@ -3,23 +3,27 @@ import "server-only";
 import { notFound, redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/dal";
-import { questions, toQuestion } from "@/lib/exam/store";
+import { listQuestions } from "@/lib/exam/store";
 import type { Question } from "@/lib/types/exam";
-import type { Answer, Assignment, Correction } from "@/lib/types/work";
+import type { Assignment } from "@/lib/types/work";
 import {
-  answerRef,
   assignmentRef,
-  correctionRef,
-  toAnswer,
+  listAnswersOf,
+  listCorrectionsOf,
   toAssignment,
-  toCorrection,
+  workRows,
+  type WorkRow,
 } from "@/lib/work/store";
+
+/** 인쇄는 시험지 한 벌이 단위다. 문항별 줄에 원본 문항(제시문 포함)을 붙여 둔다. */
+export interface PrintRow extends WorkRow {
+  /** 기출에 저장된 원본 문항. 지워졌으면 null */
+  source: Question | null;
+}
 
 export interface PrintContext {
   assignment: Assignment;
-  question: Question | null;
-  answer: Answer | null;
-  correction: Correction | null;
+  rows: PrintRow[];
   isTeacher: boolean;
 }
 
@@ -28,68 +32,34 @@ export interface PrintContext {
  * 볼 권한이 없으면 여기서 막는다 — 선생님, 또는 그 과제의 학생만 볼 수 있다.
  */
 export async function loadForPrint(input: {
-  assignmentId?: string;
-  answerId?: string;
-  correctionId?: string;
+  assignmentId: string;
   /** 첨삭 결과지는 공개 전이면 학생에게 보이지 않는다 */
   requirePublished?: boolean;
 }): Promise<PrintContext> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  let assignmentId = input.assignmentId ?? null;
-  let answer: Answer | null = null;
-  let correction: Correction | null = null;
-
-  if (input.correctionId) {
-    const snap = await correctionRef(input.correctionId).get();
-    if (!snap.exists) notFound();
-    correction = toCorrection(snap);
-    assignmentId = correction.assignmentId;
-  }
-
-  if (input.answerId) {
-    const snap = await answerRef(input.answerId).get();
-    if (!snap.exists) notFound();
-    answer = toAnswer(snap);
-    assignmentId = answer.assignmentId;
-  }
-
-  if (!assignmentId) notFound();
-
-  const assignmentSnap = await assignmentRef(assignmentId).get();
-  if (!assignmentSnap.exists) notFound();
-  const assignment = toAssignment(assignmentSnap);
+  const snap = await assignmentRef(input.assignmentId).get();
+  if (!snap.exists) notFound();
+  const assignment = toAssignment(snap);
 
   const isTeacher = user.role === "teacher";
   if (!isTeacher && assignment.studentId !== user.uid) redirect("/dashboard");
-  if (!isTeacher && input.requirePublished && !correction?.published) redirect("/dashboard");
 
-  if (!answer && assignment.answerId) {
-    const snap = await answerRef(assignment.answerId).get();
-    if (snap.exists) answer = toAnswer(snap);
+  const [answerRows, correctionRows, sourceQuestions] = await Promise.all([
+    listAnswersOf(assignment.id),
+    listCorrectionsOf(assignment.id),
+    listQuestions(assignment.univId, assignment.examId),
+  ]);
+
+  const rows: PrintRow[] = workRows(assignment, answerRows, correctionRows).map((row) => ({
+    ...row,
+    source: sourceQuestions.find((q) => q.id === row.question.questionId) ?? null,
+  }));
+
+  if (!isTeacher && input.requirePublished && !rows.every((row) => row.correction?.published)) {
+    redirect("/dashboard");
   }
 
-  const questionSnap = await questions(assignment.univId, assignment.examId)
-    .doc(assignment.questionId)
-    .get();
-
-  return {
-    assignment,
-    question: questionSnap.exists ? toQuestion(questionSnap) : null,
-    answer,
-    correction,
-    isTeacher,
-  };
-}
-
-export function lengthRuleOf(assignment: Assignment) {
-  return assignment.charTarget
-    ? {
-        target: assignment.charTarget,
-        tolerance: assignment.tolerance,
-        min: assignment.charMin,
-        max: assignment.charMax,
-      }
-    : null;
+  return { assignment, rows, isTeacher };
 }

@@ -6,6 +6,21 @@ Claude API로 첨삭하는 서비스. 문제지·답안지·첨삭 결과는 모
 - 대상 대학: 홍익대, 단국대, 건국대, 동국대, 국민대, 아주대 (관리 화면에서 추가·삭제)
 - 인문 논술만 다룬다. 문항에 `원고지 / 자유 서식` 타입 필드만 두고 수리 서식은 구현하지 않는다.
 
+## 단위 — 시험지와 문항
+
+논술 기출 하나에는 보통 제시문 (가)~(라)와 문항 두셋이 함께 있다. 그래서 **다루는 단위를 나눈다.**
+
+| 무엇 | 단위 | 왜 |
+|---|---|---|
+| 배정 · 제출 · 공개 | **시험지** | 실제 시험처럼 문항을 다 쓰고 한꺼번에 낸다 |
+| 답안(원고지) · 채점 · 첨삭 | **문항** | 채점 기준이 문항마다 100점이라 섞을 수 없다 |
+| 제시문 | 시험지에 한 벌 | 여러 문항이 같은 (가)~(라)를 함께 쓴다 |
+
+- 과제 하나 = 시험지 하나. `assignments/{id}.questions[]` 에 문항을 통째로 베껴 둔다.
+- 답안과 첨삭은 `questionId` 로 자기 문항을 가리키고 `assignmentId` 로 묶인다.
+- 제시문은 문항마다 복사해 두되(그 문항에 무엇이 딸렸는지 알아야 첨삭이 된다),
+  화면과 인쇄물에서는 `mergePassages` 로 한 번만 싣는다.
+
 ## 기술 스택
 
 | 영역 | 선택 |
@@ -79,13 +94,19 @@ universities/{univId}    name, slug, order, active, manuscriptSpec
                          # rubric.items[].questionNumber — 채점은 문항 단위이고 문항마다 100점이다
 
 assignments/{id}         studentId, studentName, univId/univName, examId/examTitle,
-                         questionId/questionNumber/questionPrompt, charTarget, tolerance,
-                         assignedBy, dueAt, status, answerId, correctionId
-                         # 문항 조건을 복사해 둔다 — 기출을 나중에 고쳐도 낸 과제는 그대로여야 한다
-answers/{id}             studentId, assignmentId, text, charCount, status('draft'|'submitted')
+                         questions[]{questionId,number,prompt,charTarget,tolerance,charMin,charMax,points},
+                         assignedBy, dueAt, status, submittedAt
+                         # 단위는 시험지. 문항 조건을 복사해 둔다 —
+                         # 기출을 나중에 고쳐도 이미 낸 과제는 그대로여야 한다
+answers/{id}             assignmentId, questionId, studentId, assignedBy,
+                         text, charCount, charCountNoSpace, status('draft'|'submitted')
   versions/{vid}         text, charCount, savedAt, reason   # 불변
-corrections/{id}         answerId, assignmentId, studentId, status, scores{items,deductions,total},
+corrections/{id}         assignmentId, questionId, answerId, studentId, assignedBy,
+                         status, scores{items,deductions,total},
                          inlineComments[], overall{}, revisedExample, teacherEdited, published, usage{}
+
+# answers · corrections 는 문항마다 하나씩이고, assignmentId 로 한 시험지에 묶인다.
+# assignedBy 를 복사해 두어 선생님 목록 화면이 한 번에 읽는다(복합 인덱스 없이).
 ```
 
 인라인 코멘트 위치는 **원문 문자 오프셋**으로 저장한다. 원고지 칸 좌표는 렌더 시 계산하므로
@@ -117,14 +138,19 @@ GET  PUT    …/exams/[examId]/questions               문항 조회 · 통째�
 POST        …/exams/[examId]/analyze                 채점 기준 초안 생성
 GET PATCH   /api/universities/[univId]/analyses/[id] 수정 · 확정 (id = examId)
 
-POST   /api/assignments                  과제 배정
-PUT    /api/answers/[id]                 자동 저장
-POST   /api/answers/[id]/submit          제출 (버전 스냅샷)
+POST   /api/assignments                  시험지 배정 (그 기출의 문항 전부 + 빈 답안까지)
+DELETE /api/assignments/[id]             회수 (답안·첨삭까지)
+POST   /api/assignments/[id]/submit      제출 — 시험지 단위, 문항마다 버전 스냅샷
+POST   /api/assignments/[id]/publish     공개 · 공개 내리기 — 시험지 단위
+GET    /api/assignments/[id]/corrections 이 시험지의 첨삭 (진행 상황 폴링)
 
-POST   /api/corrections                  첨삭 잡 생성
-GET    /api/corrections/[id]             폴링
-GET    /api/corrections/[id]/stream      SSE 진행
-PATCH  /api/corrections/[id]             점수·코멘트 수정 · 공개 (teacher)
+POST   /api/answers                      문항 하나의 답안 열기 (없으면 만든다)
+PUT    /api/answers/[id]                 자동 저장 (문항마다)
+
+POST   /api/corrections                  첨삭 실행 { assignmentId, questionId? }
+                                         — 문항을 하나씩 차례로 돌린다
+GET    /api/corrections/[id]             문항 하나 폴링
+PATCH  /api/corrections/[id]             점수·코멘트 수정 (teacher)
 ```
 
 ## 비용
@@ -138,6 +164,8 @@ PATCH  /api/corrections/[id]             점수·코멘트 수정 · 공개 (tea
 | 기출 등록할 때 (한 번) | 채점 기준 분석 | $0.19~0.30 |
 | **답안마다** | **첨삭** | **$0.10~0.47** |
 
+첨삭은 **문항마다** 한 번씩이다. 문항 2개짜리 시험지를 30명에게 내면 첨삭 60회다.
+
 문제지 쪽은 기출 하나에 한 번만 들고 합쳐도 $0.3 이 안 된다.
 비용은 사실상 **첨삭 하나뿐**이다 — 학생 30명 × 문항 2개면 첨삭만 60회다.
 
@@ -150,6 +178,8 @@ Claude 구독을 이미 쓰고 있으면 **API 요금 없이** 같은 일을 할
 앱이 프롬프트를 만들어 주고, claude.ai 에서 받은 답을 그대로 붙여 넣으면 읽어 들인다.
 첨삭 · 문항 뽑기 · 채점 기준 분석 세 가지 모두 화면에 `직접 …` 버튼이 있다.
 
+- 첨삭 프롬프트에는 답안 한 편이 들어가므로 **문항 하나가 단위**다. 문항이 둘이면 두 번 돌린다.
+  화면이 남은 문항을 표시하고, 하나를 넣으면 다음 문항으로 넘어간다.
 - 프롬프트를 만드는 데는 API 를 부르지 않는다 — 파일에서 틀을 읽어 값을 끼워 넣는 문자열 조립이다.
 - 사람이 옮길 때는 글자 번호를 셀 수 없으므로, 첨삭 코멘트 위치를 **원문 조각(quote)** 으로 받아
   앱이 답안에서 찾아 붙인다. 공백이 달라져도 찾고, 못 찾은 것은 몇 개인지 알려 준다.
@@ -204,12 +234,14 @@ Claude 구독을 이미 쓰고 있으면 **API 요금 없이** 같은 일을 할
 원고지 38칸을 세로 A4 에 넣으면 칸이 16px 까지 작아진다. 그래서 **답안지·첨삭지는 가로로** 낸다
 (폭 277mm, 칸 25px). 문제지 본문만 세로로 읽고, 뒤에 붙는 답안지는 이름 붙인 `@page` 로 가로로 넘긴다.
 
+인쇄는 넷 다 **시험지 한 벌**이 단위다(`/print/…/[assignmentId]`). 문항 수만큼 장이 늘어난다.
+
 | 출력 | 방향 | 구성 |
 |---|---|---|
-| 문제지 | 세로 + 가로 | 1쪽 논제·제시문(세로), 2쪽 빈 답안지(가로) |
-| 빈 답안지 | 가로 | 머리글 + 원고지 |
-| 작성된 답안지 | 가로 | 머리글 + 답안이 놓인 원고지 |
-| 첨삭 결과지 | 가로 3쪽 | 1쪽 채점·답안(번호 표시), 2쪽 코멘트(두 단), 3쪽 총평·고쳐 쓴 예시 |
+| 문제지 | 세로 + 가로 | 1쪽 제시문·논제 전부(세로), 뒤에 문항마다 빈 답안지(가로) |
+| 빈 답안지 | 가로 | 문항마다 한 장 — 머리글 + 원고지 |
+| 작성된 답안지 | 가로 | 문항마다 한 장 — 머리글 + 답안이 놓인 원고지 |
+| 첨삭 결과지 | 가로 3쪽 × 문항 수 | 1쪽 채점·답안(번호 표시), 2쪽 코멘트(두 단), 3쪽 총평·고쳐 쓴 예시 |
 
 서버 PDF 생성은 Vercel 환경 제약을 고려해 2차 과제로 둔다.
 
@@ -235,13 +267,15 @@ Claude 구독을 이미 쓰고 있으면 **API 요금 없이** 같은 일을 할
 | `npm run check:pdfjs` | 폴백 경로(pdfjs)가 브라우저 전역 없이도 뜨는지 |
 | `npm run check:pagecount` | 원본 바이트로 PDF 쪽 수를 세는지 — OCR 응답이 잘렸는지 가리는 데 쓴다 |
 | `npm run check:crop` | 학생에게 배정된 쪽만 나가는지 — 같은 파일의 해설 쪽이 딸려 나가면 안 된다 |
-| `npm run check:print` + `check:printfit` | 인쇄 화면을 받아 PDF 로 만든 뒤, 글자가 종이 안에 들어오는지 잰다 |
+| `npm run check:pages <없음>` | 화면 · 인쇄 15종이 뜨는지만 훑는다. Claude 를 부르지 않아 요금이 없다 |
+| `npm run check:print <과제id>` + `check:printfit` | 인쇄 화면을 받아 PDF 로 만든 뒤, 글자가 종이 안에 들어오는지 잰다 |
 | `npm run check:clova` | CLOVA OCR 연동 확인. 내부 전용 주소면 먼저 걸러 준다. 실제 호출이라 요금이 든다 |
 | `npm run smoke:stage3` | dev 서버를 켠 채 추출 → 문항 파싱 → 채점 기준 분석 → 확정까지 |
 | `npm run smoke:intake` | 인문·자연, 문제·해설이 섞인 PDF·HWPX 를 대학까지 알아내 기출로 묶는지 |
 | `npm run smoke:full` | **전 과정** — 기출 등록 → 기준 확정 → 학생 가입 → 배정 → 작성·제출 → 첨삭 → 공개 → 학생 확인 → 인쇄 4종 |
 | `npm run smoke:practice` | 선생님이 자기에게 과제를 내서 직접 풀고 첨삭까지 돌리는 흐름 |
 | `npm run setup:demo` · `npm run cleanup:test` | 눈으로 확인할 데이터 만들기 · 점검 데이터 정리 |
+| `npm run migrate:assignments` | 과제 단위를 문항 → 시험지로 옮긴 일회성 이사 (`DRY=1` 로 미리 보기) |
 | `npm run time:pages` | 로그인한 상태에서 관리 화면 응답 시간 측정 |
 
 smoke 계열은 Claude API 를 실제로 호출하고, 만든 데이터는 끝나고 지운다.

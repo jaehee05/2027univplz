@@ -1,7 +1,8 @@
 import { PrintFrame } from "@/components/print/PrintFrame";
 import { PrintSheet } from "@/components/print/PrintSheet";
-import { lengthRuleOf, loadForPrint } from "@/lib/work/print";
-import { SEVERITY_LABEL, totalScore } from "@/lib/types/work";
+import { loadForPrint, type PrintRow } from "@/lib/work/print";
+import { lengthRuleOf } from "@/lib/work/store";
+import { SEVERITY_LABEL, totalScore, type Assignment } from "@/lib/types/work";
 
 const SEVERITY_MARK: Record<string, string> = {
   good: "○",
@@ -10,15 +11,18 @@ const SEVERITY_MARK: Record<string, string> = {
   error: "×",
 };
 
-export default async function PrintCorrectionPage({
-  params,
-}: PageProps<"/print/correction/[correctionId]">) {
-  const { correctionId } = await params;
-  const { assignment, answer, correction } = await loadForPrint({
-    correctionId,
-    requirePublished: true,
-  });
-
+/** 첨삭지 한 벌 — 문항 하나에 3쪽. */
+function CorrectionSet({
+  assignment,
+  row,
+  summary,
+}: {
+  assignment: Assignment;
+  row: PrintRow;
+  /** 첫 벌에만 붙이는 시험지 전체 점수표 */
+  summary: { number: string; total: number | null }[] | null;
+}) {
+  const { question, answer, correction } = row;
   if (!correction) return null;
 
   const total = totalScore(correction.scores);
@@ -32,11 +36,7 @@ export default async function PrintCorrectionPage({
     .map((comment, index) => ({ ...comment, index: index + 1 }));
 
   return (
-    <PrintFrame
-      title="첨삭 결과지"
-      subtitle={`${assignment.studentName} · ${assignment.examTitle} ${assignment.questionNumber}번`}
-      wide
-    >
+    <>
       {/* ── 1쪽: 점수와 답안 ─────────────────────────────────── */}
       <section className="print-landscape">
         <header className="flex items-end justify-between border-b-2 border-neutral-900 pb-2">
@@ -45,12 +45,10 @@ export default async function PrintCorrectionPage({
               {assignment.univName} · {assignment.examTitle}
             </p>
             <p className="text-base font-bold">
-              문제 {assignment.questionNumber}
-              {assignment.charTarget ? ` (${assignment.charTarget}자 내외)` : ""} ·{" "}
+              문제 {question.number}
+              {question.charTarget ? ` (${question.charTarget}자 내외)` : ""} ·{" "}
               {assignment.studentName}
-              <span className="ml-2 font-normal text-neutral-500">
-                {answer?.charCount ?? 0}자
-              </span>
+              <span className="ml-2 font-normal text-neutral-500">{answer?.charCount ?? 0}자</span>
             </p>
           </div>
           <p className="text-right">
@@ -63,6 +61,15 @@ export default async function PrintCorrectionPage({
             ) : null}
           </p>
         </header>
+
+        {summary && summary.length > 1 ? (
+          <p className="mt-1 text-xs text-neutral-600">
+            이 시험지 전체 —{" "}
+            {summary
+              .map((item) => `${item.number}번 ${item.total == null ? "—" : `${item.total}점`}`)
+              .join(" · ")}
+          </p>
+        ) : null}
 
         {/* 채점표를 위로 올린다. 원고지는 38칸 × 26px = 261mm 라 가로 폭을 통째로 써야 안 잘린다. */}
         <div className="mt-2">
@@ -101,8 +108,8 @@ export default async function PrintCorrectionPage({
           <div className="mt-1">
             <PrintSheet
               text={text}
-              lengthRule={lengthRuleOf(assignment)}
-              label={`문제 ${assignment.questionNumber}`}
+              lengthRule={lengthRuleOf(question)}
+              label={`문제 ${question.number}`}
               comments={correction.inlineComments}
             />
           </div>
@@ -112,7 +119,7 @@ export default async function PrintCorrectionPage({
       {/* ── 2쪽: 코멘트 ──────────────────────────────────────── */}
       <section className="print-landscape">
         <h2 className="border-b border-neutral-400 pb-1 text-sm font-bold">
-          [코멘트] 번호는 앞장 답안에 붙은 번호와 같습니다
+          [코멘트] {question.number}번 · 번호는 앞장 답안에 붙은 번호와 같습니다
         </h2>
         <ol className="print-columns mt-2 text-xs">
           {comments.map((comment) => (
@@ -138,7 +145,9 @@ export default async function PrintCorrectionPage({
 
       {/* ── 3쪽: 총평과 고쳐 쓴 예시 ─────────────────────────── */}
       <section className="print-landscape">
-        <h2 className="border-b border-neutral-400 pb-1 text-sm font-bold">[총평]</h2>
+        <h2 className="border-b border-neutral-400 pb-1 text-sm font-bold">
+          [총평] {question.number}번
+        </h2>
         <p className="mt-2 leading-6 whitespace-pre-wrap">{correction.overall.summary}</p>
 
         <div className="mt-3 grid grid-cols-2 gap-6 text-xs">
@@ -176,7 +185,8 @@ export default async function PrintCorrectionPage({
             <h2 className="border-b border-neutral-400 pb-1 text-sm font-bold">
               [고쳐 쓴 예시]
               <span className="ml-2 font-normal text-neutral-500">
-                내가 쓴 답안의 논지를 살려 구성과 문장만 손본 것 · {correction.revisedExample.length}자
+                내가 쓴 답안의 논지를 살려 구성과 문장만 손본 것 ·{" "}
+                {correction.revisedExample.length}자
               </span>
             </h2>
             <p className="print-columns mt-2 leading-6 break-keep whitespace-pre-wrap">
@@ -185,6 +195,36 @@ export default async function PrintCorrectionPage({
           </div>
         ) : null}
       </section>
+    </>
+  );
+}
+
+export default async function PrintCorrectionPage({
+  params,
+}: PageProps<"/print/correction/[assignmentId]">) {
+  const { assignmentId } = await params;
+  const { assignment, rows } = await loadForPrint({ assignmentId, requirePublished: true });
+
+  const done = rows.filter((row) => row.correction?.status === "done");
+  const summary = done.map((row) => ({
+    number: row.question.number,
+    total: row.correction ? totalScore(row.correction.scores) : null,
+  }));
+
+  return (
+    <PrintFrame
+      title="첨삭 결과지"
+      subtitle={`${assignment.studentName} · ${assignment.examTitle} · 문항 ${done.length}개`}
+      wide
+    >
+      {done.map((row, index) => (
+        <CorrectionSet
+          key={row.question.questionId}
+          assignment={assignment}
+          row={row}
+          summary={index === 0 ? summary : null}
+        />
+      ))}
     </PrintFrame>
   );
 }

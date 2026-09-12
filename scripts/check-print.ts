@@ -14,8 +14,8 @@ const BASE = process.env.SMOKE_BASE_URL ?? "https://2027univplz.vercel.app";
 const OUT = process.env.PRINT_OUT ?? "/tmp/dummy/print";
 
 async function main() {
-  const correctionId = process.argv[2];
-  if (!correctionId) throw new Error("첨삭 id 를 넘겨 주세요.");
+  const assignmentId = process.argv[2];
+  if (!assignmentId) throw new Error("과제 id 를 넘겨 주세요.");
 
   const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY!);
   sa.private_key = sa.private_key.replace(/\\n/g, "\n");
@@ -36,15 +36,16 @@ async function main() {
   });
   const cookie = (session.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).join("; ");
 
-  const correction = await db.collection("corrections").doc(correctionId).get();
-  const assignmentId = correction.data()!.assignmentId as string;
-  const answerId = correction.data()!.answerId as string;
+  if (!(await db.collection("assignments").doc(assignmentId).get()).exists) {
+    throw new Error("없는 과제입니다.");
+  }
 
+  // 인쇄는 넷 다 시험지 한 벌이 단위다 — 문항 수만큼 장이 늘어난다.
   const pages: [string, string][] = [
     ["exam", `/print/exam/${assignmentId}`],
     ["sheet", `/print/sheet/${assignmentId}`],
-    ["answer", `/print/answer/${answerId}`],
-    ["correction", `/print/correction/${correctionId}`],
+    ["answer", `/print/answer/${assignmentId}`],
+    ["correction", `/print/correction/${assignmentId}`],
   ];
 
   for (const [name, path] of pages) {

@@ -52,10 +52,17 @@ async function main() {
     (a: { status: string }) => a.status === "submitted" || a.status === "corrected",
   );
   if (!assignment) throw new Error("제출된 답안이 없습니다. npm run smoke:practice 로 하나 만드세요.");
-  console.log(`▶ 과제: ${assignment.studentName} · ${assignment.questionNumber}번`);
+  // 첨삭 프롬프트에는 답안 한 편이 들어간다 — 문항 하나를 골라 돌린다.
+  const question = assignment.questions[0];
+  console.log(
+    `▶ 과제: ${assignment.studentName} · ${assignment.examTitle}` +
+      ` (문항 ${assignment.questions.length}개 중 ${question.number}번)`,
+  );
 
   console.log("▶ 앱이 프롬프트를 만든다");
-  const built = await api(`/api/corrections/prompt?assignmentId=${assignment.id}`);
+  const built = await api(
+    `/api/corrections/prompt?assignmentId=${assignment.id}&questionId=${question.questionId}`,
+  );
   console.log(`  ${built.prompt.length.toLocaleString()}자`);
   const hasSchema = built.prompt.includes('"revisedExample"') && built.prompt.includes("quote");
   console.log(`  ${hasSchema ? "✔" : "✖"} JSON 형식 안내가 들어 있다`);
@@ -79,7 +86,11 @@ async function main() {
   const messy = `네, 첨삭 결과입니다.\n\n${answer}\n\n도움이 되었길 바랍니다.`;
   const saved = await api("/api/corrections/manual", {
     method: "POST",
-    body: JSON.stringify({ assignmentId: assignment.id, pasted: messy }),
+    body: JSON.stringify({
+      assignmentId: assignment.id,
+      questionId: question.questionId,
+      pasted: messy,
+    }),
   });
 
   const c = saved.correction;

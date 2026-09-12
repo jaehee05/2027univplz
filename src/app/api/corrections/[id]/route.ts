@@ -2,7 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 
 import { apiUser } from "@/lib/auth/dal";
-import { assignmentRef, correctionRef, toCorrection } from "@/lib/work/store";
+import { correctionRef, toCorrection } from "@/lib/work/store";
 import { totalScore } from "@/lib/types/work";
 
 type Ctx = RouteContext<"/api/corrections/[id]">;
@@ -72,10 +72,12 @@ const patchSchema = z.object({
     })
     .optional(),
   revisedExample: z.string().max(20000).optional(),
-  published: z.boolean().optional(),
 });
 
-/** 점수 · 코멘트 수정, 학생 공개 (teacher 전용) */
+/**
+ * 점수 · 코멘트 수정 (teacher 전용).
+ * 공개는 시험지 단위라 여기서 하지 않는다 — POST /api/assignments/[id]/publish.
+ */
 export async function PATCH(request: Request, ctx: Ctx) {
   const auth = await apiUser();
   if (!auth.ok) return auth.response;
@@ -97,27 +99,17 @@ export async function PATCH(request: Request, ctx: Ctx) {
     );
   }
 
-  const current = toCorrection(snap);
-  const { published, ...edits } = parsed.data;
-
-  const update: Record<string, unknown> = { ...edits, updatedAt: FieldValue.serverTimestamp() };
-  if (Object.keys(edits).length > 0) update.teacherEdited = true;
-
+  const edits = parsed.data;
+  const update: Record<string, unknown> = {
+    ...edits,
+    teacherEdited: true,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
   if (edits.scores) {
     update.scores = { ...edits.scores, total: totalScore({ ...edits.scores, total: 0 }) };
   }
-  if (published !== undefined) {
-    update.published = published;
-    update.publishedAt = published ? FieldValue.serverTimestamp() : null;
-  }
 
   await correctionRef(id).update(update);
-
-  if (published !== undefined) {
-    await assignmentRef(current.assignmentId)
-      .update({ status: published ? "published" : "corrected" })
-      .catch(() => undefined);
-  }
 
   return Response.json({ correction: toCorrection(await correctionRef(id).get()) });
 }

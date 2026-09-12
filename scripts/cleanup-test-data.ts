@@ -46,7 +46,13 @@ async function main() {
   for (const user of (await db.collection("users").get()).docs) {
     const data = user.data();
     if (!/^smoke-.*@example\.com$/.test(data.email ?? "")) continue;
+    // 과제 하나에 문항 수만큼 답안 · 첨삭이 딸려 있다. 함께 지운다.
     for (const a of (await db.collection("assignments").where("studentId", "==", user.id).get()).docs) {
+      for (const name of ["answers", "corrections"] as const) {
+        for (const doc of (await db.collection(name).where("assignmentId", "==", a.id).get()).docs) {
+          await doc.ref.delete();
+        }
+      }
       await a.ref.delete();
     }
     await user.ref.delete();
