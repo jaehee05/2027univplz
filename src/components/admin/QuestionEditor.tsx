@@ -13,10 +13,17 @@ interface Props {
   onSaved: (questions: Question[]) => void;
 }
 
-function blankQuestion(index: number): Question {
+/**
+ * 빈 문항 하나. id 는 이미 있는 것과 절대 겹치면 안 된다 —
+ * 겹치면 저장할 때 같은 문서에 두 번 쓰여 먼저 것이 사라진다.
+ */
+function blankQuestion(existing: Question[]): Question {
+  const taken = new Set(existing.map((q) => q.id));
+  let n = existing.length + 1;
+  while (taken.has(`q${n}`)) n += 1;
   return {
-    id: `q${index + 1}`,
-    number: String(index + 1),
+    id: `q${n}`,
+    number: String(n),
     prompt: "",
     passages: [],
     charTarget: null,
@@ -63,9 +70,13 @@ export function QuestionEditor({ univId, examId, initial, onSaved }: Props) {
       if (!response.ok) throw new Error(data.error ?? "문항 파싱에 실패했습니다.");
       setQuestions(data.questions ?? []);
       setNote(
-        data.note
-          ? `${data.note} (입력 ${data.usage.inputTokens.toLocaleString()} · 출력 ${data.usage.outputTokens.toLocaleString()} 토큰)`
-          : `문항 ${data.questions.length}개를 찾았습니다. 확인 후 저장하세요.`,
+        [
+          `문항 ${data.questions.length}개를 찾았습니다. 확인 후 저장하세요.` +
+            ` (입력 ${data.usage.inputTokens.toLocaleString()} · 출력 ${data.usage.outputTokens.toLocaleString()} 토큰)`,
+          data.note,
+        ]
+          .filter(Boolean)
+          .join("\n"),
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "문항 파싱에 실패했습니다.");
@@ -119,7 +130,7 @@ export function QuestionEditor({ univId, examId, initial, onSaved }: Props) {
           </button>
           <button
             type="button"
-            onClick={() => setQuestions((prev) => [...prev, blankQuestion(prev.length)])}
+            onClick={() => setQuestions((prev) => [...prev, blankQuestion(prev)])}
             className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
           >
             직접 추가
@@ -146,14 +157,16 @@ export function QuestionEditor({ univId, examId, initial, onSaved }: Props) {
             setQuestions(found);
             setManual(false);
             setNote(
-              `문항 ${found.length}개를 넣었습니다. 확인 후 저장하세요.` +
-                (data.note ? ` (${data.note})` : ""),
+              [`문항 ${found.length}개를 넣었습니다. 확인 후 저장하세요.`, data.note]
+                .filter(Boolean)
+                .join("\n"),
             );
           }}
         />
       ) : null}
 
-      {note ? <p className="mt-2 text-sm text-neutral-600">{note}</p> : null}
+      {/* 바로잡은 곳·확인할 곳을 줄마다 적어 오므로 줄바꿈을 살린다. */}
+      {note ? <p className="mt-2 text-sm whitespace-pre-line text-neutral-600">{note}</p> : null}
       {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
 
       <div className="mt-4 space-y-4">

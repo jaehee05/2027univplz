@@ -60,7 +60,14 @@ export async function PUT(request: Request, ctx: Ctx) {
   const keep = new Set<string>();
   parsed.data.questions.forEach(({ id: givenId, ...rest }, index) => {
     // id 는 문서 이름으로 쓰므로 문서 본문에는 넣지 않는다.
-    const id = givenId ?? slugifyNumber(rest.number, index);
+    let id = givenId ?? slugifyNumber(rest.number, index);
+    // 같은 id 가 두 번 오면 뒤엣것이 앞엣것을 덮어써 문항이 소리 없이 사라진다.
+    // 번호가 겹치는 일은 있을 수 있으니 막지 말고 비켜 준다.
+    if (keep.has(id)) {
+      let n = 2;
+      while (keep.has(`${id}-${n}`)) n += 1;
+      id = `${id}-${n}`;
+    }
     keep.add(id);
     batch.set(col.doc(id), rest);
   });
