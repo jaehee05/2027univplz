@@ -25,7 +25,8 @@ const input = {
       label: "(가)",
       text: "집중과 분산은 어느 하나가 절대적으로 옳은 원리가 아니다.\n\n힘이 흩어진 상태는 '만인의 만인에 대한 투쟁'이라는 무질서를 낳는다.",
     },
-    { label: "(나)", text: "표준어와 방언은 <집중>과 \"분산\"의 관계로 볼 수 있다. 5 < 7 & 3 > 1" },
+    // 기호에 괄호가 없는 경우 — 논제가 (나) 꼴로 부르므로 문제지도 맞춰야 한다.
+    { label: "나", text: "표준어와 방언은 <집중>과 \"분산\"의 관계로 볼 수 있다. 5 < 7 & 3 > 1" },
   ],
   questions: [
     {
@@ -34,7 +35,9 @@ const input = {
       lengthNote: "800자 내외",
       charTarget: 800,
     },
-    { number: "2", prompt: "제시문 (나)의 관점에서 (가)를 비판하시오.", lengthNote: null, charTarget: 600 },
+    // 원문 문구에 이미 괄호가 씌워진 경우 — 그대로 두면 `((800±100자))` 가 된다.
+    { number: "2", prompt: "제시문 (나)의 관점에서 (가)를 비판하시오.", lengthNote: "(800±100자)", charTarget: 600 },
+    { number: "3", prompt: "위 논의를 종합하시오.", lengthNote: null, charTarget: 600 },
   ],
 };
 
@@ -130,21 +133,47 @@ console.log("\n넣은 글이 도로 나오는지");
 const read = extractHwpx(bytes);
 const text = read.pageTexts.join("\n");
 
-check("제목", text.includes("홍익대학교 2027 모의논술"));
-for (const passage of input.passages) {
-  check(`제시문 ${passage.label} 머리`, text.includes(`제시문 ${passage.label}`));
-}
+check("대학 이름", text.includes("홍익대학교"));
+check("시험 이름", text.includes("2027 모의논술"));
+check("제시문 (가) 머리", text.includes("제시문 (가)"));
+check("괄호 없는 기호도 (나) 로", text.includes("제시문 (나)"));
 check("제시문 (가) 본문", text.includes("집중과 분산은 어느 하나가"));
 check("빈 줄로 나뉜 뒷 문단", text.includes("만인의 만인에 대한 투쟁"));
 check("문제 1 머리 · 분량", text.includes("문제 1 (800자 내외)"));
-check("문제 2 머리 · 분량", text.includes("문제 2 (600자 내외)"));
+check("문제 2 — 괄호 겹치지 않음", text.includes("문제 2 (800±100자)") && !text.includes("((")); 
+check("문제 3 — 분량 조건 없으면 목표로", text.includes("문제 3 (600자 내외)"));
 check("논제 본문", text.includes("집중과 분산의 관계를 논하시오"));
 check("검수 안내", text.includes("PDF 로 저장해 올려 주세요"));
+
+// ── 표지 서식 ─────────────────────────────────────────────
+console.log("\n표지");
+check("응시자 칸 — 모집단위", text.includes("모 집 단 위"));
+check("응시자 칸 — 수험번호", text.includes("수 험 번 호"));
+check("응시자 칸 — 성명", text.includes("성 명"));
+check("유의사항 머리", text.includes("<유의사항>"));
+check("유의사항 1번", text.includes("1. 답안에 제목을 쓰지 마십시오."));
+check("유의사항 5번", text.includes("5. 수험생의 신원을 드러내는"));
+
+const sectionXmlText = decoder.decode(entries["Contents/section0.xml"]);
+check("표가 들어갔는가", /<hp:tbl\b/.test(sectionXmlText),
+  `${(sectionXmlText.match(/<hp:tc\b/g) ?? []).length}칸`);
+check("표는 실선 테두리(borderFill 2)", /<hp:tbl[^>]*borderFillIDRef="2"/.test(sectionXmlText));
+check("표지 다음에 쪽을 나눴는가", /pageBreak="1"/.test(sectionXmlText));
+// 한글이 계산할 자리다. 우리가 지어 넣으면 한 문단이 한 줄에 겹쳐 찍힌다.
+check("linesegarray 를 넣지 않았는가", !sectionXmlText.includes("linesegarray"));
 
 // XML 특수문자가 살아 돌아오는지 — 이스케이프가 어긋나면 파일이 깨진다.
 check("꺾쇠 · 따옴표 · 앰퍼샌드", text.includes('<집중>과 "분산"') && text.includes("5 < 7 & 3 > 1"));
 
 console.log(`\n  문단 ${read.paragraphs}개 · 쪽 ${read.pageTexts.length}개`);
+
+// 대학마다 문구가 다르므로 바꿔 넣을 수 있어야 한다.
+const custom = extractHwpx(buildHandoutHwpx({ ...input, notes: ["시험 시간은 120분입니다."] }))
+  .pageTexts.join("\n");
+check(
+  "유의사항 바꿔 넣기",
+  custom.includes("1. 시험 시간은 120분입니다.") && !custom.includes("답안에 제목을"),
+);
 
 if (failed > 0) {
   console.log(`\n✗ ${failed}개 어긋남`);

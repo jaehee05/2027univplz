@@ -40,16 +40,63 @@ const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
  * 자리라, 글자 폭을 모르는 우리가 지어내면 한 문단이 통째로 한 줄에 겹쳐 찍힌다.
  * 비워 두면 한글이 열면서 스스로 줄을 나눈다.
  */
-function paragraph(text: string, style: Style, id: number): string {
+function paragraph(
+  text: string,
+  style: Style,
+  options: { pageBreak?: boolean } = {},
+): string {
   const runs = text
     .split("\n")
     .map((line) => `<hp:t>${escapeXml(line)}</hp:t>`)
     .join("<hp:lineBreak/>");
 
   return (
-    `<hp:p id="${id}" paraPrIDRef="${PARA_PR[style]}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
+    `<hp:p paraPrIDRef="${PARA_PR[style]}" styleIDRef="0" pageBreak="${options.pageBreak ? 1 : 0}" columnBreak="0" merged="0">` +
     `<hp:run charPrIDRef="${CHAR_PR[style]}">${runs}</hp:run>` +
     `</hp:p>`
+  );
+}
+
+/** 표 안 칸 하나. 칸마다 제 문단을 품는다. */
+function cell(text: string, col: number, row: number, width: number, height: number): string {
+  return (
+    `<hp:tc name="" header="${row === 0 ? 1 : 0}" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="2">` +
+    `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">` +
+    `<hp:p paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
+    `<hp:run charPrIDRef="0"><hp:t>${escapeXml(text)}</hp:t></hp:run>` +
+    `</hp:p>` +
+    `</hp:subList>` +
+    `<hp:cellAddr colAddr="${col}" rowAddr="${row}"/>` +
+    `<hp:cellSpan colSpan="1" rowSpan="1"/>` +
+    `<hp:cellSz width="${width}" height="${height}"/>` +
+    `<hp:cellMargin left="510" right="510" top="141" bottom="141"/>` +
+    `</hp:tc>`
+  );
+}
+
+/**
+ * 표 하나. 실제 대학 기출 문제지의 응시자 정보 칸을 본떴다.
+ * 표는 문단 안에 들어간다 — OWPML 이 그렇게 생겼다.
+ */
+function table(rows: string[][], widths: number[], rowHeight: number): string {
+  const total = widths.reduce((sum, width) => sum + width, 0);
+  const body = rows
+    .map(
+      (cells, row) =>
+        `<hp:tr>` +
+        cells.map((text, col) => cell(text, col, row, widths[col], rowHeight)).join("") +
+        `</hp:tr>`,
+    )
+    .join("");
+
+  return (
+    `<hp:tbl id="" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="1" rowCnt="${rows.length}" colCnt="${widths.length}" cellSpacing="0" borderFillIDRef="2" noAdjust="0">` +
+    `<hp:sz width="${total}" widthRelTo="ABSOLUTE" height="${rowHeight * rows.length}" heightRelTo="ABSOLUTE" protect="0"/>` +
+    `<hp:pos treatAsChar="0" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="CENTER" vertOffset="0" horzOffset="0"/>` +
+    `<hp:outMargin left="0" right="0" top="0" bottom="1417"/>` +
+    `<hp:inMargin left="510" right="510" top="141" bottom="141"/>` +
+    body +
+    `</hp:tbl>`
   );
 }
 
@@ -58,6 +105,18 @@ function paragraph(text: string, style: Style, id: number): string {
  * section0.xml 이 가리키는 번호(`charPrIDRef` · `paraPrIDRef`)가 여기 다 있어야
  * 한글이 문서를 연다. 없는 번호를 가리키면 파일이 깨진 것으로 본다.
  */
+function borderFill(id: number, type: "NONE" | "SOLID"): string {
+  const side = `type="${type}" width="0.12 mm" color="#000000"`;
+  return (
+    `<hh:borderFill id="${id}" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">` +
+    `<hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>` +
+    `<hh:leftBorder ${side}/><hh:rightBorder ${side}/>` +
+    `<hh:topBorder ${side}/><hh:bottomBorder ${side}/>` +
+    `<hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>` +
+    `</hh:borderFill>`
+  );
+}
+
 function headerXml(): string {
   const fonts = ["함초롬바탕", "함초롬돋움"]
     .map(
@@ -124,14 +183,10 @@ function headerXml(): string {
     `<hh:beginNum page="1" footnote="1" endnote="1" pic="1" tbl="1" equation="1"/>` +
     `<hh:refList>` +
     `<hh:fontfaces itemCnt="${LANGS.length}">${fontfaces}</hh:fontfaces>` +
-    // 테두리는 "없음" 하나만 있으면 된다. 글자·문단 모양이 이 번호를 가리킨다.
-    `<hh:borderFills itemCnt="1">` +
-    `<hh:borderFill id="1" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">` +
-    `<hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>` +
-    `<hh:leftBorder type="NONE" width="0.1 mm" color="#000000"/><hh:rightBorder type="NONE" width="0.1 mm" color="#000000"/>` +
-    `<hh:topBorder type="NONE" width="0.1 mm" color="#000000"/><hh:bottomBorder type="NONE" width="0.1 mm" color="#000000"/>` +
-    `<hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>` +
-    `</hh:borderFill>` +
+    // 1 = 테두리 없음(글자·문단이 가리킨다), 2 = 실선(표가 가리킨다).
+    `<hh:borderFills itemCnt="2">` +
+    borderFill(1, "NONE") +
+    borderFill(2, "SOLID") +
     `</hh:borderFills>` +
     `<hh:charProperties itemCnt="4">${charShapes}</hh:charProperties>` +
     `<hh:tabProperties itemCnt="1"><hh:tabPr id="0" autoTabLeft="0" autoTabRight="0"/></hh:tabProperties>` +
@@ -153,7 +208,9 @@ function sectionXml(paragraphs: string[]): string {
     `<hp:grid lineGrid="0" charGrid="0" wonggojiFormat="0" strtnum="0"/>` +
     `<hp:startNum pageStartsOn="BOTH" page="0" pic="0" tbl="0" equation="0"/>` +
     `<hp:visibility hideFirstHeader="0" hideFirstFooter="0" hideFirstMasterPage="0" border="SHOW_ALL" fill="SHOW_ALL" hideFirstPageNum="0" hideFirstEmptyLine="0" showLineNumber="0"/>` +
-    `<hp:pagePr landscape="NARROWLY" width="59528" height="84188" gutterType="LEFT_ONLY">` +
+    // 실제 대학 기출 파일을 열어 보니 세로 A4 도 landscape="WIDELY" 였다.
+    // 이름과 달리 가로/세로를 뜻하는 값이 아니다 — 크기(width < height)가 방향을 정한다.
+    `<hp:pagePr landscape="WIDELY" width="59528" height="84188" gutterType="LEFT_ONLY">` +
     `<hp:margin header="4252" footer="4252" gutter="0" left="5669" right="5669" top="5669" bottom="5669"/>` +
     `</hp:pagePr>` +
     `<hp:footNotePr>` +
@@ -179,7 +236,7 @@ function sectionXml(paragraphs: string[]): string {
     `</hp:secPr>`;
 
   // 구역 설정은 첫 문단 안에 실린다 — OWPML 이 그렇게 생겼다.
-  const first = paragraphs[0] ?? paragraph("", "body", 0);
+  const first = paragraphs[0] ?? paragraph("", "body");
   const withSecPr = first.replace(
     /(<hp:run charPrIDRef="\d+">)/,
     `$1${secPr}`,
@@ -258,49 +315,123 @@ export interface HandoutInput {
   /** 여러 문항이 함께 쓰는 것은 미리 한 번씩만 남겨서 넘긴다 (`mergePassages`) */
   passages: { label: string; text: string }[];
   questions: HandoutQuestion[];
+  /**
+   * 표지에 싣는 유의사항. 대학마다 문구가 달라 바꿔 넣을 수 있게 둔다.
+   * 넘기지 않으면 아래 기본 문구를 쓴다 — 선생님이 한글에서 고치는 것을 전제로 한 초안이다.
+   */
+  notes?: string[];
 }
 
+/**
+ * 논술 문제지에 흔히 적히는 유의사항.
+ * 대학마다 문구가 다르니 **그대로 내보내지 말고 검수하라**는 뜻으로 초안만 둔다.
+ */
+export const DEFAULT_NOTES = [
+  "답안에 제목을 쓰지 마십시오.",
+  "답안은 하나의 완결된 글로 작성하십시오.",
+  "문제에서 요구하는 글자 수를 지키십시오.",
+  "제시문의 문장을 그대로 옮겨 쓰지 마십시오. 다만 필요한 단어나 어구를 인용할 수는 있습니다.",
+  "수험생의 신원을 드러내는 표현을 쓰지 마십시오.",
+];
+
 function lengthLine(question: HandoutQuestion): string | null {
-  if (question.lengthNote) return question.lengthNote;
+  // 원문 문구에 이미 괄호가 씌워져 있으면 벗긴다 — 안 그러면 `((800±100자))` 가 된다.
+  const raw = question.lengthNote?.trim();
+  if (raw) return raw.replace(/^\((.*)\)$/, "$1");
   if (question.charTarget) return `${question.charTarget}자 내외`;
   return null;
 }
 
+/** 제시문 기호를 `(가)` 꼴로 맞춘다. 논제가 그 꼴로 부르므로 문제지도 같아야 한다. */
+function passageLabel(label: string): string {
+  const bare = label.trim().replace(/^[(（]|[)）]$/g, "");
+  return `(${bare})`;
+}
+
+/** 표지 · 본문을 이루는 한 덩어리 */
+type Block =
+  | { kind: "text"; text: string; style: Style; pageBreak?: boolean }
+  | { kind: "table"; rows: string[][]; widths: number[]; rowHeight: number };
+
+function render(block: Block, first: boolean): string {
+  if (block.kind === "table") {
+    return (
+      `<hp:p paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
+      `<hp:run charPrIDRef="0">${table(block.rows, block.widths, block.rowHeight)}</hp:run>` +
+      `</hp:p>`
+    );
+  }
+  return paragraph(block.text, block.style, { pageBreak: block.pageBreak && !first });
+}
+
 /**
- * 문제지 초안을 HWPX 로 만든다. 제시문과 논제만 담는다 —
- * 답안지는 앱이 원고지 규격대로 따로 인쇄하므로 여기 넣지 않는다.
+ * 문제지 초안을 HWPX 로 만든다.
+ *
+ * 표지(제목 · 응시자 칸 · 유의사항) 한 쪽, 그 뒤로 제시문과 논제.
+ * 답안지는 넣지 않는다 — 앱이 원고지 규격대로 따로 인쇄한다.
+ *
+ * 대학 로고는 넣지 못한다. 그림 파일을 앱이 가지고 있지 않아서다.
+ * 필요하면 선생님이 한글에서 표지 맨 위에 넣으면 된다.
  */
 export function buildHandoutHwpx(input: HandoutInput): Uint8Array {
-  const lines: { text: string; style: Style }[] = [
-    { text: `${input.univName} ${input.examTitle}`, style: "title" },
+  const blocks: Block[] = [
+    { kind: "text", text: `${input.univName}`, style: "note" },
+    { kind: "text", text: input.examTitle, style: "title" },
+    // 응시자가 손으로 적는 칸. 라벨 줄 + 빈 줄.
+    {
+      kind: "table",
+      rows: [
+        ["모 집 단 위", "수 험 번 호", "성 명"],
+        ["", "", ""],
+      ],
+      widths: [17000, 15000, 13000],
+      rowHeight: 1400,
+    },
+    { kind: "text", text: "<유의사항>", style: "heading" },
+    ...(input.notes ?? DEFAULT_NOTES).map((note, index) => ({
+      kind: "text" as const,
+      text: `${index + 1}. ${note}`,
+      style: "body" as const,
+    })),
   ];
 
-  if (input.passages.length > 0) {
-    for (const passage of input.passages) {
-      lines.push({ text: `제시문 ${passage.label}`, style: "heading" });
-      // 빈 줄로 나뉜 덩어리를 문단 하나씩으로 옮긴다.
-      for (const block of passage.text.split(/\n\s*\n/)) {
-        const text = block.trim();
-        if (text) lines.push({ text, style: "body" });
-      }
+  // 표지 다음 쪽부터 제시문이다.
+  let startsPage = true;
+  for (const passage of input.passages) {
+    blocks.push({
+      kind: "text",
+      text: `제시문 ${passageLabel(passage.label)}`,
+      style: "heading",
+      pageBreak: startsPage,
+    });
+    startsPage = false;
+    // 빈 줄로 나뉜 덩어리를 문단 하나씩으로 옮긴다.
+    for (const chunk of passage.text.split(/\n\s*\n/)) {
+      const text = chunk.trim();
+      if (text) blocks.push({ kind: "text", text, style: "body" });
     }
   }
 
   for (const question of input.questions) {
     const note = lengthLine(question);
-    lines.push({
+    blocks.push({
+      kind: "text",
       text: `문제 ${question.number}${note ? ` (${note})` : ""}`,
       style: "heading",
+      // 제시문이 하나도 없으면 논제가 표지 다음 쪽을 연다.
+      pageBreak: startsPage,
     });
-    lines.push({ text: question.prompt.trim(), style: "body" });
+    startsPage = false;
+    blocks.push({ kind: "text", text: question.prompt.trim(), style: "body" });
   }
 
-  lines.push({
-    text: "※ OCR 로 뽑은 글을 옮긴 초안입니다. 오탈자와 제시문 범위를 확인한 뒤 PDF 로 저장해 올려 주세요.",
+  blocks.push({
+    kind: "text",
+    text: "※ OCR 로 뽑은 글을 옮긴 초안입니다. 오탈자 · 제시문 범위 · 유의사항 문구를 확인한 뒤 PDF 로 저장해 올려 주세요.",
     style: "note",
   });
 
-  const section = sectionXml(lines.map((line, index) => paragraph(line.text, line.style, index)));
+  const section = sectionXml(blocks.map((block, index) => render(block, index === 0)));
   const encoder = new TextEncoder();
 
   return zipSync(
