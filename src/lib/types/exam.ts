@@ -14,6 +14,26 @@ export interface University {
   createdAt: string | null;
 }
 
+/**
+ * 한 쪽 안에서 가려야 할 자리.
+ *
+ * 문제와 해설이 **같은 쪽**에 실린 기출이 있다. 쪽 단위로 자르는 것만으로는
+ * 학생에게 답이 함께 나가므로, 그 자리를 흰색으로 덮어서 내보낸다.
+ *
+ * 좌표는 쪽 크기 대비 0~1 비율이고 원점은 **왼쪽 위**다 (화면에서 재는 그대로).
+ * 쪽 크기가 제각각이어도, 나중에 쪽을 잘라 내도 값이 그대로 남는다.
+ */
+export interface PdfMask {
+  /** 원본 파일 기준 쪽 번호 (1부터) */
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** 무엇을 가렸는지 — 관리 화면에서만 보인다 */
+  note?: string;
+}
+
 /** PDF 한 개의 저장 · 추출 상태 */
 export interface PdfFile {
   storagePath: string;
@@ -25,6 +45,11 @@ export interface PdfFile {
    */
   pageFrom: number | null;
   pageTo: number | null;
+  /**
+   * 학생에게 내보낼 때 덮을 자리. 쪽을 나눠도 해결되지 않는 경우에만 쓴다.
+   * 비어 있으면 아무것도 덮지 않는다.
+   */
+  masks: PdfMask[];
   uploadedAt: string | null;
   extraction: Extraction | null;
 }

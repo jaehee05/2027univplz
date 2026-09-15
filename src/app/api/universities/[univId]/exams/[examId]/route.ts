@@ -40,6 +40,26 @@ const rangeSchema = z.object({
   pageTo: z.number().int().min(1).nullable(),
 });
 
+/**
+ * 한 쪽 안에서 가릴 자리. 쪽 크기 대비 0~1 비율, 왼쪽 위 원점.
+ * 문제와 해설이 같은 쪽에 실린 기출에만 쓴다.
+ */
+const maskSchema = z.object({
+  kind: z.enum(["question", "solution"]),
+  masks: z
+    .array(
+      z.object({
+        page: z.number().int().min(1),
+        x: z.number().min(0).max(1),
+        y: z.number().min(0).max(1),
+        w: z.number().min(0).max(1),
+        h: z.number().min(0).max(1),
+        note: z.string().trim().max(60).optional(),
+      }),
+    )
+    .max(100),
+});
+
 const patchSchema = z.object({
   year: z.number().int().min(2000).max(2100).optional(),
   title: z.string().trim().min(1).max(60).optional(),
@@ -47,6 +67,7 @@ const patchSchema = z.object({
   /** 업로드를 마친 뒤 어떤 파일이 올라갔는지 알려 준다. */
   pdf: pdfSchema.optional(),
   range: rangeSchema.optional(),
+  mask: maskSchema.optional(),
 });
 
 export async function PATCH(request: Request, ctx: Ctx) {
@@ -64,7 +85,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
     return Response.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
 
-  const { pdf, range, ...rest } = parsed.data;
+  const { pdf, range, mask, ...rest } = parsed.data;
   const update: Record<string, unknown> = { ...rest };
 
   if (pdf) {
@@ -93,6 +114,14 @@ export async function PATCH(request: Request, ctx: Ctx) {
     update[`${range.kind}Pdf.pageTo`] = range.pageTo;
     // 범위가 달라지면 다시 뽑아야 한다.
     update[`${range.kind}Pdf.extraction`] = null;
+  }
+
+  if (mask) {
+    // 크기가 0 인 것은 잘못 누른 흔적이라 버린다.
+    update[`${mask.kind}Pdf.masks`] = mask.masks.filter(
+      (item) => item.w > 0.002 && item.h > 0.002,
+    );
+    // 잘라 둔 파일은 가림칠 내용으로 이름이 갈려서 저절로 새로 구워진다.
   }
 
   await ref.update(update);

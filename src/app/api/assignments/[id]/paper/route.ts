@@ -12,7 +12,8 @@ type Ctx = RouteContext<"/api/assignments/[id]/paper">;
  * 여기서 "이 과제의 학생인가"만 확인하고 서버가 대신 읽어 넘긴다.
  *
  * 한 파일에 문제지와 해설이 같이 든 경우가 많아, 파일을 통째로 내보내면
- * 학생이 뒤로 넘겨 답을 볼 수 있다. 그래서 배정된 쪽만 잘라서 내보낸다.
+ * 학생이 뒤로 넘겨 답을 볼 수 있다. 그래서 배정된 쪽만 잘라서 내보내고,
+ * 한 쪽 안에 섞여 있으면 선생님이 칠해 둔 자리를 덮어서 내보낸다.
  */
 export async function GET(request: Request, ctx: Ctx) {
   const auth = await apiUser();
@@ -53,9 +54,15 @@ export async function GET(request: Request, ctx: Ctx) {
   }
 
   try {
-    // 선생님이 봐도 배정된 쪽만 내보낸다 — 학생이 보는 것과 같아야 확인이 된다.
+    // 선생님이 봐도 배정된 쪽만, 가림칠도 그대로 얹어서 내보낸다 —
+    // 학생이 보는 것과 같아야 제대로 가려졌는지 확인이 된다.
     // 원본 전체는 관리 화면에서 본다.
-    const bytes = await cropPdfPages(file.storagePath, file.pageFrom, file.pageTo);
+    const bytes = await cropPdfPages(
+      file.storagePath,
+      file.pageFrom,
+      file.pageTo,
+      file.masks,
+    );
 
     return new Response(new Uint8Array(bytes), {
       headers: {

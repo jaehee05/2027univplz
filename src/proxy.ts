@@ -26,5 +26,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|svg|pdf)$).*)"],
+  // public/ 에 내놓은 정적 파일은 지나가게 둔다.
+  // pdfjs 워커(.mjs)가 여기 안 걸려 로그인으로 튕기면 가림칠 화면이 통째로 죽는다.
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|pdf|mjs|js|css|woff2?)$).*)",
+  ],
 };

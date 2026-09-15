@@ -3,6 +3,7 @@
 import { ref as storageRef, uploadBytesResumable } from "firebase/storage";
 import { useState } from "react";
 
+import { MaskEditor } from "@/components/admin/MaskEditor";
 import { clientStorage } from "@/lib/firebase/client";
 import type { Exam, PdfFile } from "@/lib/types/exam";
 
@@ -29,6 +30,7 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [masking, setMasking] = useState(false);
 
   const base = `/api/universities/${univId}/exams/${examId}`;
 
@@ -131,6 +133,8 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
   }
 
   const extraction = pdf?.extraction ?? null;
+  // 가림칠은 PDF 에만 걸 수 있다 — 한글 문서는 글자로만 나간다.
+  const isPdf = Boolean(pdf && pdf.fileName.toLowerCase().endsWith(".pdf"));
 
   return (
     <section className="rounded-lg border border-neutral-200 p-4">
@@ -225,6 +229,23 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
               >
                 범위 바꾸기
               </button>
+
+              {/* 쪽을 잘라도 한 쪽 안에 해설이 같이 있으면 답이 새 나간다. */}
+              {isPdf ? (
+                <button
+                  type="button"
+                  onClick={() => setMasking((value) => !value)}
+                  className={[
+                    "rounded border px-2 py-0.5 text-xs",
+                    pdf.masks.length > 0
+                      ? "border-rose-300 bg-rose-50 text-rose-700"
+                      : "border-neutral-300",
+                  ].join(" ")}
+                >
+                  가림칠
+                  {pdf.masks.length > 0 ? ` ${pdf.masks.length}곳` : ""}
+                </button>
+              ) : null}
             </div>
           )}
         </div>
@@ -270,6 +291,21 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
             {preview || "(빈 결과)"}
           </pre>
         </details>
+      ) : null}
+
+      {masking && pdf && isPdf ? (
+        <div className="mt-3">
+          <MaskEditor
+            univId={univId}
+            examId={examId}
+            kind={kind}
+            pageFrom={pdf.pageFrom}
+            pageTo={pdf.pageTo}
+            initial={pdf.masks}
+            onExam={onExam}
+            onClose={() => setMasking(false)}
+          />
+        </div>
       ) : null}
 
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}

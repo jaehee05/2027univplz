@@ -8,6 +8,7 @@ import type {
   Exam,
   Extraction,
   PdfFile,
+  PdfMask,
   Question,
   University,
 } from "@/lib/types/exam";
@@ -44,6 +45,7 @@ function toPdfFile(raw: DocumentData | undefined): PdfFile | null {
     size: raw.size ?? 0,
     pageFrom: raw.pageFrom ?? null,
     pageTo: raw.pageTo ?? null,
+    masks: Array.isArray(raw.masks) ? (raw.masks as PdfMask[]) : [],
     uploadedAt: toIso(raw.uploadedAt),
     extraction: raw.extraction
       ? ({
