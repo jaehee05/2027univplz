@@ -26,6 +26,11 @@ export function AssignPanel({
   const active = students.filter((student) => student.active);
   const [picked, setPicked] = useState<string[]>([]);
   const [dueAt, setDueAt] = useState("");
+  /**
+   * 학생에게 보일 문제지 이름.
+   * 어느 대학 몇 학년도인지 알면 학생이 인터넷에서 해설을 찾아 베낀다.
+   */
+  const [paperName, setPaperName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
@@ -35,7 +40,13 @@ export function AssignPanel({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // 단위는 시험지다 — 이 기출의 문항이 전부 나간다.
-      body: JSON.stringify({ studentIds, univId, examId, dueAt: dueAt || null }),
+      body: JSON.stringify({
+        studentIds,
+        univId,
+        examId,
+        dueAt: dueAt || null,
+        paperName: paperName.trim() || null,
+      }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "배정에 실패했습니다.");
@@ -122,21 +133,53 @@ export function AssignPanel({
             </ul>
           </div>
 
-          <div className="mt-3">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="text-sm">
+              <span className="block text-xs text-neutral-500">
+                학생에게 보일 이름
+              </span>
+              <input
+                value={paperName}
+                onChange={(event) => setPaperName(event.target.value)}
+                maxLength={60}
+                placeholder="예) 모의논술 1회"
+                className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+              />
+            </label>
+
             <label className="text-sm">
               <span className="block text-xs text-neutral-500">마감일 (없으면 비움)</span>
               <input
                 type="date"
                 value={dueAt}
                 onChange={(event) => setDueAt(event.target.value)}
-                className="mt-1 w-full max-w-xs rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
               />
             </label>
           </div>
 
+          <p
+            className={[
+              "mt-1.5 rounded-md px-2.5 py-1.5 text-xs leading-5",
+              paperName.trim() ? "text-neutral-500" : "bg-amber-50 text-amber-800",
+            ].join(" ")}
+          >
+            {paperName.trim() ? (
+              <>
+                학생 화면과 인쇄물에는 <b>{paperName.trim()}</b> 만 나갑니다. 대학과 학년도는
+                선생님 화면에만 보입니다.
+              </>
+            ) : (
+              <>
+                비워 두면 대학과 학년도가 학생에게 그대로 나갑니다. 그걸 알면 인터넷에서
+                해설을 찾아 베낄 수 있습니다.
+              </>
+            )}
+          </p>
+
           {active.length === 0 ? (
             <p className="mt-3 text-sm text-neutral-500">
-              아직 학생이 없습니다. 관리 홈에서 초대 코드를 발급하세요. 그 전에도 아래에서
+              아직 받아들인 학생이 없습니다. 학생이 가입 신청하면 ‘학생’ 화면에서 받아 줍니다. 그 전에도 아래에서
               직접 풀어 보실 수 있습니다.
             </p>
           ) : (

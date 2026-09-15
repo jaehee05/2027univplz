@@ -45,6 +45,7 @@ export function toAssignment(snap: DocumentSnapshot): Assignment {
     univName: data.univName ?? "",
     examId: data.examId,
     examTitle: data.examTitle ?? "",
+    paperName: data.paperName ?? null,
     questions: (data.questions ?? []).map(toAssignmentQuestion),
     assignedBy: data.assignedBy,
     selfPractice: data.studentId === data.assignedBy,

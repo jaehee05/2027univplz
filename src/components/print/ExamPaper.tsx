@@ -1,6 +1,7 @@
 import { mergePassages } from "@/lib/exam/passages";
 import type { Assignment } from "@/lib/types/work";
 import type { PrintRow } from "@/lib/work/print";
+import { paperTitleFor } from "@/lib/work/summary";
 
 /** 문제지 — 논제 전부와 제시문. 답안지와 같은 종이 폭에 맞춘다. */
 export function ExamPaper({
@@ -10,15 +11,17 @@ export function ExamPaper({
   assignment: Assignment;
   rows: PrintRow[];
 }) {
+  // 학생에게는 선생님이 정한 이름만 보인다.
+  const paper = paperTitleFor(assignment);
   // 실제 문제지처럼 제시문을 앞에 모으고, 논제는 뒤에 차례로 싣는다.
   const passages = mergePassages(rows.map((row) => row.source?.passages));
 
   return (
     <article>
       <header className="border-b-2 border-neutral-900 pb-3">
-        <p className="text-sm">{assignment.univName}</p>
+        {paper.subtitle ? <p className="text-sm">{paper.subtitle}</p> : null}
         <h2 className="mt-1 text-lg font-bold">
-          {assignment.examTitle}
+          {paper.title}
           <span className="ml-2 text-sm font-normal">문항 {rows.length}개</span>
         </h2>
       </header>

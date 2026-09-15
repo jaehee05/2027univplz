@@ -5,6 +5,7 @@ import { totalScore } from "@/lib/types/work";
 import {
   assignmentProgress,
   dueLabel,
+  paperTitleFor,
   type QuestionProgress,
 } from "@/lib/work/summary";
 
@@ -41,6 +42,8 @@ export function AssignmentCard({
   /** 공개된 첨삭이 있으면 점수를 함께 보여 준다 */
   corrections: Correction[];
 }) {
+  // 학생에게는 선생님이 정한 이름만 보인다 — 대학·학년도를 알면 해설을 찾아 베낀다.
+  const paper = paperTitleFor(assignment);
   const action = nextAction(assignment);
   const due = dueLabel(assignment.dueAt);
   const ratio = assignmentProgress(progress);
@@ -54,8 +57,10 @@ export function AssignmentCard({
     <article className="rounded-2xl border border-neutral-200 bg-white p-4 transition hover:border-neutral-300 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-neutral-500">{assignment.univName}</p>
-          <h3 className="mt-0.5 truncate font-semibold">{assignment.examTitle}</h3>
+          {paper.subtitle ? (
+            <p className="text-sm text-neutral-500">{paper.subtitle}</p>
+          ) : null}
+          <h3 className="truncate font-semibold">{paper.title}</h3>
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-1">

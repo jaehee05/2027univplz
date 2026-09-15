@@ -59,6 +59,14 @@ export interface Assignment {
   univName: string;
   examId: string;
   examTitle: string;
+  /**
+   * 학생에게 보일 문제지 이름. 선생님이 배정할 때 정한다.
+   *
+   * 학생이 어느 대학 몇 학년도 기출인지 알면 인터넷에서 해설을 찾아 베낀다.
+   * 그래서 학생 화면과 인쇄물에는 이 이름만 나가고, `univName` · `examTitle` 은
+   * 선생님 화면에만 쓴다. 비워 두면 기출 이름이 그대로 나간다.
+   */
+  paperName: string | null;
   /** 문제지에 실린 차례 그대로 */
   questions: AssignmentQuestion[];
   assignedBy: string;

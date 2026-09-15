@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/dal";
 import { CorrectionSheets, type SheetRow } from "@/components/correction/CorrectionSheets";
 import { totalScore } from "@/lib/types/work";
+import { paperTitleFor } from "@/lib/work/summary";
 import {
   assignmentRef,
   lengthRuleOf,
@@ -43,6 +44,9 @@ export default async function ResultPage({ params }: PageProps<"/results/[assign
 
   if (rows.length === 0) redirect("/dashboard");
 
+  // 학생에게는 선생님이 정한 이름만 보인다.
+  const paper = paperTitleFor(assignment);
+
   const sheets: SheetRow[] = rows.map((row) => ({
     questionId: row.question.questionId,
     number: row.question.number,
@@ -70,8 +74,10 @@ export default async function ResultPage({ params }: PageProps<"/results/[assign
       </div>
 
       <header className="mt-3">
-        <p className="text-sm text-neutral-500">{assignment.univName}</p>
-        <h1 className="mt-0.5 text-xl font-bold sm:text-2xl">{assignment.examTitle}</h1>
+        {paper.subtitle ? (
+          <p className="text-sm text-neutral-500">{paper.subtitle}</p>
+        ) : null}
+        <h1 className="text-xl font-bold sm:text-2xl">{paper.title}</h1>
         <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-sm text-neutral-600">
           {sheets.map((sheet) => (
             <span key={sheet.questionId}>

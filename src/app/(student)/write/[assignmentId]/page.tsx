@@ -7,10 +7,24 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireUser } from "@/lib/auth/dal";
 import { WriteWorkspace } from "@/components/manuscript/WriteWorkspace";
 import { examRef, listQuestions, toExam } from "@/lib/exam/store";
+import type { PdfFile } from "@/lib/types/exam";
 import { mergePassages } from "@/lib/exam/passages";
 import { answers, assignmentRef, listAnswersOf, toAssignment } from "@/lib/work/store";
+import { paperTitleFor } from "@/lib/work/summary";
 
 export const metadata: Metadata = { title: "답안 쓰기" };
+
+/**
+ * 문제지 주소에 붙일 짧은 표식.
+ * 파일이나 쪽 범위가 바뀌면 값이 달라져 학생 브라우저가 새로 받는다.
+ * 올린 시각을 그대로 싣지 않으려고 줄여서 쓴다.
+ */
+function paperVersion(paper: PdfFile | null): string {
+  const seed = [paper?.uploadedAt ?? "", paper?.pageFrom ?? 0, paper?.pageTo ?? 0].join("-");
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+  return Math.abs(hash).toString(36);
+}
 
 export default async function WritePage({ params }: PageProps<"/write/[assignmentId]">) {
   const user = await requireUser();
@@ -58,6 +72,9 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
   const paper = exam?.studentPdf ?? exam?.questionPdf ?? null;
   const hasPdf = Boolean(paper && paper.fileName.toLowerCase().endsWith(".pdf"));
 
+  // 학생에게는 선생님이 정한 이름만 보인다 — 대학·학년도를 알면 해설을 찾아 베낀다.
+  const shown = paperTitleFor(assignment);
+
   // 여러 문항이 함께 쓰는 제시문은 한 번만 싣는다.
   const passages = mergePassages(
     assignment.questions.map(
@@ -76,9 +93,9 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
             ←
           </Link>
           <div className="min-w-0">
-            <h1 className="truncate font-bold">{assignment.examTitle}</h1>
+            <h1 className="truncate font-bold">{shown.title}</h1>
             <p className="text-xs text-neutral-500">
-              {assignment.univName} · 문항 {assignment.questions.length}개
+              {shown.subtitle ? `${shown.subtitle} · ` : ""}문항 {assignment.questions.length}개
             </p>
           </div>
         </div>
@@ -101,7 +118,8 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
           pageFrom: paper?.pageFrom ?? null,
           pageTo: paper?.pageTo ?? null,
           // 파일이나 쪽 범위가 바뀌면 주소가 달라져 학생 브라우저가 새로 받는다.
-          version: [paper?.uploadedAt ?? "", paper?.pageFrom ?? 0, paper?.pageTo ?? 0].join("-"),
+          // 값을 그대로 싣지 않고 짧게 줄인다 — 올린 시각까지 주소에 내보일 이유가 없다.
+          version: paperVersion(paper),
         }}
       />
     </main>

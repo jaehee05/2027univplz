@@ -91,6 +91,22 @@ export function studentStats(
   return { average: Math.round(mean(all)), gradedCount: all.length, delta };
 }
 
+/**
+ * 학생에게 보일 시험지 이름.
+ *
+ * 선생님이 정해 둔 이름이 있으면 그것만 쓴다 — 어느 대학 몇 학년도인지 알면
+ * 학생이 해설을 찾아 베낀다. 정해 두지 않았으면 기출 이름이 그대로 나간다.
+ */
+export function paperTitleFor(assignment: {
+  paperName: string | null;
+  univName: string;
+  examTitle: string;
+}): { title: string; subtitle: string | null } {
+  const name = assignment.paperName?.trim();
+  if (name) return { title: name, subtitle: null };
+  return { title: assignment.examTitle, subtitle: assignment.univName };
+}
+
 /** 마감까지 남은 날. 지났으면 음수. 마감이 없으면 null */
 export function daysLeft(iso: string | null): number | null {
   if (!iso) return null;

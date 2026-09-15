@@ -5,6 +5,7 @@ import { PrintSheet } from "@/components/print/PrintSheet";
 import { ExamPaper } from "@/components/print/ExamPaper";
 import { loadForPrint } from "@/lib/work/print";
 import { lengthRuleOf } from "@/lib/work/store";
+import { paperTitleFor } from "@/lib/work/summary";
 
 export const metadata: Metadata = { title: "문제지" };
 
@@ -12,10 +13,13 @@ export default async function PrintExamPage({ params }: PageProps<"/print/exam/[
   const { assignmentId } = await params;
   const { assignment, rows } = await loadForPrint({ assignmentId });
 
+  // 학생에게는 선생님이 정한 이름만 보인다 — 대학·학년도를 알면 해설을 찾아 베낀다.
+  const paper = paperTitleFor(assignment);
+
   return (
     <PrintFrame
       title="문제지"
-      subtitle={`${assignment.univName} ${assignment.examTitle} · 문항 ${rows.length}개 · 빈 답안지 포함`}
+      subtitle={`${paper.title} · 문항 ${rows.length}개 · 빈 답안지 포함`}
     >
       <div className="print-page">
         <ExamPaper assignment={assignment} rows={rows} />
@@ -25,7 +29,7 @@ export default async function PrintExamPage({ params }: PageProps<"/print/exam/[
       {rows.map(({ question }) => (
         <div key={question.questionId} className="print-landscape mt-10 print:mt-0">
           <h2 className="mb-3 text-sm font-bold">
-            [답안지] {assignment.univName} {assignment.examTitle} {question.number}번
+            [답안지] {paper.title} {question.number}번
             {question.charTarget ? ` (${question.charTarget}자 내외)` : ""}
           </h2>
           <PrintSheet lengthRule={lengthRuleOf(question)} label={`문제 ${question.number}`} />

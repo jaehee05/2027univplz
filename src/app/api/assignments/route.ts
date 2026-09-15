@@ -21,6 +21,8 @@ const bodySchema = z.object({
   examId: z.string().min(1),
   /** YYYY-MM-DD */
   dueAt: z.string().trim().max(10).nullable().optional(),
+  /** 학생에게 보일 이름. 비우면 기출 이름이 그대로 나간다. */
+  paperName: z.string().trim().max(60).nullable().optional(),
 });
 
 /**
@@ -38,7 +40,7 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const { studentIds, univId, examId, dueAt } = parsed.data;
+  const { studentIds, univId, examId, dueAt, paperName } = parsed.data;
 
   const [univSnap, examSnap, examQuestions] = await Promise.all([
     universityRef(univId).get(),
@@ -107,6 +109,8 @@ export async function POST(request: Request) {
       univName: university.name,
       examId,
       examTitle: `${exam.year}학년도 ${exam.title}${exam.session ? ` · ${exam.session}` : ""}`,
+      // 학생 화면과 인쇄물에는 이 이름만 나간다. 대학·학년도는 선생님 화면에만.
+      paperName: paperName || null,
       questions: copied,
       assignedBy: auth.user.uid,
       dueAt: dueAt ? Timestamp.fromDate(new Date(`${dueAt}T23:59:59+09:00`)) : null,

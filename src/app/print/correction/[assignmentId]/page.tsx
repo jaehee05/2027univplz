@@ -6,6 +6,7 @@ import { PrintSheet } from "@/components/print/PrintSheet";
 import { loadForPrint, type PrintRow } from "@/lib/work/print";
 import { lengthRuleOf } from "@/lib/work/store";
 import { SEVERITY_LABEL, totalScore, type Assignment } from "@/lib/types/work";
+import { paperTitleFor } from "@/lib/work/summary";
 
 export const metadata: Metadata = { title: "첨삭 결과지" };
 
@@ -30,6 +31,9 @@ function CorrectionSet({
   const { question, answer, correction } = row;
   if (!correction) return null;
 
+  // 학생에게는 선생님이 정한 이름만 보인다.
+  const paper = paperTitleFor(assignment);
+
   const total = totalScore(correction.scores);
   const earned = correction.scores.items.reduce((sum, item) => sum + item.awarded, 0);
   const lost = correction.scores.deductions.reduce((sum, item) => sum + item.points, 0);
@@ -45,7 +49,8 @@ function CorrectionSet({
         <header className="flex items-end justify-between border-b-2 border-neutral-900 pb-2">
           <div>
             <p className="text-sm">
-              {assignment.univName} · {assignment.examTitle}
+              {paper.subtitle ? `${paper.subtitle} · ` : ""}
+              {paper.title}
             </p>
             <p className="text-base font-bold">
               문제 {question.number}
@@ -217,7 +222,7 @@ export default async function PrintCorrectionPage({
   return (
     <PrintFrame
       title="첨삭 결과지"
-      subtitle={`${assignment.studentName} · ${assignment.examTitle} · 문항 ${done.length}개`}
+      subtitle={`${assignment.studentName} · ${paperTitleFor(assignment).title} · 문항 ${done.length}개`}
       wide
     >
       {done.map((row, index) => (
