@@ -244,7 +244,9 @@ export function ManuscriptGrid({
                         onMarkSelect(numbers[0].index);
                         return;
                       }
-                      onCellSelect?.(slot.cell ? slot.cell.start : (layout.cells.at(-1)?.end ?? 0));
+                      // 칸의 **끝**으로 간다. 앞으로 보내면 지우기를 눌러도 앞 글자가 지워져,
+                      // 눌러 놓고 고치려던 글자는 그대로 남는다.
+                      onCellSelect?.(slot.cell ? slot.cell.end : (layout.cells.at(-1)?.end ?? 0));
                     }}
                     className={[
                       // shrink-0 — 좁은 자리에 넣으면 칸이 눌려 글자가 어긋난다. 대신 가로로 스크롤한다.
