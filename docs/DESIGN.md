@@ -29,9 +29,22 @@ Claude API로 첨삭하는 서비스. 문제지·답안지·첨삭 결과는 모
 | 인증 | Firebase Auth (이메일/비밀번호 + Google) → 서버는 httpOnly 세션 쿠키 |
 | DB | Firestore |
 | 파일 | Firebase Storage (기출·해설 PDF) |
-| LLM | Claude API — 첨삭·분석 `claude-opus-5`, 파일 분류 `claude-haiku-4-5` (환경변수 교체 가능) |
+| LLM | Claude API — 첨삭·분석 `claude-sonnet-5`, 파일 분류 `claude-haiku-4-5` (환경변수 교체 가능) |
 | PDF 글자 | 네이버 CLOVA OCR — 텍스트 PDF·스캔본을 가리지 않고 한 번에 읽는다. **Claude 는 쓰지 않는다.** 없거나 실패하면 pdfjs 로 내려가고, 스캔본이면 실패시킨다 |
 | 한글(HWPX) | zip 안 OWPML 을 직접 읽는다. 외부 호출 없음 |
+
+### 문제지에서 해설 가리기
+
+한 파일에 문제와 해설이 같이 든 기출이 많아, 학생에게는 배정된 **쪽만 잘라서** 내보낸다
+(`lib/docs/crop.ts`). 그런데 **한 쪽 안에** 둘이 같이 실린 기출도 있어 쪽을 잘라도 소용이 없다.
+그때는 선생님이 관리 화면에서 그 자리를 사각형으로 칠해 두고(`PdfFile.masks`), 서버가
+내보낼 때 흰색으로 덮는다. 좌표는 쪽 크기 대비 0~1 비율이라 쪽 크기가 제각각이어도 버틴다.
+쪽 회전(`/Rotate`)이 걸린 파일은 보이는 모양과 속 좌표계가 어긋나므로 되돌려 자리를 잡는다 —
+`npm run check:mask` 가 네 방향을 모두 건다.
+
+> ⚠ 덮기는 **눈에만** 걸린다. 덮인 자리의 글자는 파일 안에 그대로 남아 있어 긁으면 읽힌다.
+> 넘겨보다 답이 보이는 것은 막지만, 작정하고 파내려는 학생은 막지 못한다.
+> 그것까지 막으려면 그 쪽을 그림으로 구워야 하고, 서버에 PDF 래스터라이저가 따로 있어야 한다.
 
 > CLOVA 는 **API Gateway 연동 후의 공개 Invoke URL**(`https://<id>.apigw.ntruss.com/custom/v1/...`)이
 > 필요하다. `clovaocr-api-kr.ncloud.com` 주소는 사설 IP(10.x)로 풀리는 NCP 내부 전용이라
@@ -62,8 +75,10 @@ Claude API로 첨삭하는 서비스. 문제지·답안지·첨삭 결과는 모
 src/
 ├─ app/
 │  ├─ (auth)/login · signup
-│  ├─ (student)/dashboard · write/[assignmentId] · results/[correctionId]
+│  ├─ (student)/dashboard · history · me · write/[assignmentId] · results/[assignmentId]
+│  │              layout.tsx — 넓으면 위 머리글, 좁으면 아래 탭바 (작성 화면에서는 빠진다)
 │  ├─ (teacher)/admin/…  (universities · exams · analysis · students · answers · corrections)
+│  │              layout.tsx — 넓으면 왼쪽 기둥, 좁으면 위 막대와 서랍
 │  ├─ print/exam · sheet · answer · correction
 │  └─ api/…
 ├─ components/  manuscript/ · correction/ · admin/ · auth/
@@ -111,6 +126,22 @@ corrections/{id}         assignmentId, questionId, answerId, studentId, assigned
 
 인라인 코멘트 위치는 **원문 문자 오프셋**으로 저장한다. 원고지 칸 좌표는 렌더 시 계산하므로
 규격이 바뀌어도 코멘트가 깨지지 않는다.
+
+## 첨삭을 보여 주는 법
+
+번호는 원문자(①)가 아니라 **`1)` 로 구간 위에 작게** 앉힌다. 원고지·줄글·인쇄물이
+`components/correction/tone.ts` 의 `markLabel` 하나를 함께 써서 번호가 어긋나지 않는다.
+
+줄글 화면에서 구간은 **반드시 인라인 요소(`<mark>`)** 여야 한다. `<button>` 은 inline-block 이라
+줄바꿈을 가로지르지 못하고, 두 줄 넘게 걸친 구간이 한 덩어리 사각형이 되어 뒷줄 글자를 덮는다.
+조각마다 끝을 다듬는 `box-decoration-clone` 도 같은 이유로 한 벌이다.
+
+코멘트는 **서로 겹친다** — 넓은 코멘트가 좁은 코멘트를 통째로 감싸는 일이 흔하다.
+칠하는 색은 가장 센 쪽 하나로 정하되, **번호는 그 자리에서 시작하는 코멘트마다 모두** 붙인다.
+그러지 않으면 안쪽에 든 코멘트가 목록에만 있고 본문에서는 찾을 수 없다.
+
+좁은 화면에는 코멘트 목록을 옆에 둘 폭이 없다. 그래서 형광펜을 누르면 아래에서
+카드가 올라오고(`CommentSheet`), 좌우로 넘기며 읽는다. 목록은 넓은 화면에서만 보인다.
 
 ## 보안 규칙 요지 (`firestore.rules`)
 
@@ -199,10 +230,14 @@ Claude 구독을 이미 쓰고 있으면 **API 요금 없이** 같은 일을 할
 | sonnet-5 · low | 7,729 | $0.101 | 52 | 12 | 77초 |
 
 네 설정이 47~55점으로 모였고, **답안의 핵심 결함(제시문 (가)의 방법을 셋이 아닌 둘로 축소)을 넷 다 잡아냈다.**
-그래서 기본값을 `opus-5 · low` 로 둔다 — 판단은 그대로 두고 군더더기 생각만 줄여 60% 아낀다.
-더 아끼려면 `ANTHROPIC_MODEL_CORRECTION=claude-sonnet-5` 로 바꾼다(추가로 절반).
+**점수가 높은 쪽이 더 잘 본 것이 아니다** — 더 후하게 매겼을 뿐이다. 판단의 실질이 같으니
+고를 근거는 품질이 아니라 값이고, 그래서 기본값은 `sonnet-5` 다. 첨삭 60회에 약 $6 이다.
+`ANTHROPIC_MODEL_CORRECTION` · `ANTHROPIC_EFFORT_CORRECTION` 으로 바꾼다.
 
 단, 이건 **답안 한 편으로 잰 것**이다. 실제 학생 답안 몇 편으로 다시 견줘 보고 정하는 편이 낫다.
+
+그리고 첨삭은 **기본이 직접 모드**다. 관리 화면에서 앞에 놓인 단추가 `직접 첨삭`이고
+`API 에 맡기기`는 그 옆으로 물러나 있다 — 같은 일을 구독으로 하면 요금이 0 이다.
 
 ## Claude 호출 설계
 
@@ -267,6 +302,7 @@ Claude 구독을 이미 쓰고 있으면 **API 요금 없이** 같은 일을 할
 | `npm run check:pdfjs` | 폴백 경로(pdfjs)가 브라우저 전역 없이도 뜨는지 |
 | `npm run check:pagecount` | 원본 바이트로 PDF 쪽 수를 세는지 — OCR 응답이 잘렸는지 가리는 데 쓴다 |
 | `npm run check:crop` | 학생에게 배정된 쪽만 나가는지 — 같은 파일의 해설 쪽이 딸려 나가면 안 된다 |
+| `npm run check:mask` | 가림칠이 제자리에 앉는지. 쪽 회전 네 방향을 모두 건다 (외부 호출 없음) |
 | `npm run check:pages <없음>` | 화면 · 인쇄 15종이 뜨는지만 훑는다. Claude 를 부르지 않아 요금이 없다 |
 | `npm run check:print <과제id>` + `check:printfit` | 인쇄 화면을 받아 PDF 로 만든 뒤, 글자가 종이 안에 들어오는지 잰다 |
 | `npm run check:clova` | CLOVA OCR 연동 확인. 내부 전용 주소면 먼저 걸러 준다. 실제 호출이라 요금이 든다 |

@@ -30,9 +30,16 @@ export const serverEnv = {
   get anthropicApiKey(): string {
     return required("ANTHROPIC_API_KEY", process.env.ANTHROPIC_API_KEY);
   },
-  /** 첨삭 · 채점 기준 분석 — 판단 품질이 결과를 좌우하는 작업 */
+  /**
+   * 첨삭 · 채점 기준 분석.
+   *
+   * 기본값은 `claude-sonnet-5`. `bench:correction` 으로 네 설정을 견줘 보니
+   * 47~55점으로 모였고 답안의 핵심 결함을 넷 다 잡아냈다 — 판단의 실질이 같았다.
+   * (점수가 높은 쪽이 더 잘 본 것이 아니라 더 후하게 매긴 것이다.)
+   * 같은 일을 절반 값에 하므로 sonnet 을 기본으로 둔다.
+   */
   get correctionModel(): string {
-    return process.env.ANTHROPIC_MODEL_CORRECTION ?? "claude-opus-5";
+    return process.env.ANTHROPIC_MODEL_CORRECTION ?? "claude-sonnet-5";
   },
   /**
    * 첨삭에서 생각에 얼마나 힘을 쓸지. 출력 토큰이 여기서 크게 갈린다.

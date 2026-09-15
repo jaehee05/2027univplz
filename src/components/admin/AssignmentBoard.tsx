@@ -240,17 +240,8 @@ export function AssignmentBoard({ initial }: { initial: BoardRow[] }) {
 
                   {assignment.status === "submitted" || assignment.status === "correcting" ? (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => void correct(row)}
-                        disabled={running !== null}
-                        className="rounded-md bg-neutral-900 px-3 py-1.5 text-white disabled:opacity-40"
-                        title="Claude API 로 돌립니다. 문항마다 요금이 듭니다."
-                      >
-                        {running === assignment.id
-                          ? "첨삭 중…"
-                          : `첨삭 돌리기 (${questions.length}문항)`}
-                      </button>
+                      {/* 기본은 직접 첨삭이다 — 같은 일을 구독으로 하면 요금이 0 이다.
+                          API 는 급할 때 쓰는 쪽으로 물러 둔다. */}
                       <button
                         type="button"
                         onClick={() =>
@@ -263,10 +254,22 @@ export function AssignmentBoard({ initial }: { initial: BoardRow[] }) {
                                 },
                           )
                         }
-                        className="rounded-md border border-neutral-300 px-3 py-1.5"
+                        className="rounded-md bg-neutral-900 px-3 py-1.5 font-medium text-white"
                         title="프롬프트를 복사해 내 Claude 구독으로 돌리고 결과만 붙여 넣습니다. 요금이 들지 않습니다."
                       >
-                        직접 첨삭
+                        직접 첨삭 ({questions.length}문항)
+                        <span className="ml-1.5 text-xs font-normal text-neutral-300">무료</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void correct(row)}
+                        disabled={running !== null}
+                        className="rounded-md border border-neutral-300 px-3 py-1.5 disabled:opacity-40"
+                        title="Claude API 로 맡깁니다. 문항마다 요금이 듭니다."
+                      >
+                        {running === assignment.id
+                          ? "첨삭 중…"
+                          : "API 에 맡기기"}
                       </button>
                     </>
                   ) : null}
