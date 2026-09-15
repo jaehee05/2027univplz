@@ -9,6 +9,7 @@ import { serverEnv } from "@/lib/env";
 import { lengthRange } from "@/lib/manuscript/spec";
 import { rubricFor, type Analysis, type Question, type RubricItem } from "@/lib/types/exam";
 import type { Correction, InlineComment } from "@/lib/types/work";
+import { snapRange } from "@/lib/work/snap";
 
 const commentSchema = z.object({
   start: z.number().int().min(0),
@@ -79,14 +80,20 @@ function renderLength(question: Question): string {
   return `${question.lengthNote ?? `${question.charTarget}자 내외`} → 허용 ${range.min}~${range.max}자`;
 }
 
-/** 위치가 답안 밖으로 나가거나 뒤집힌 코멘트는 버린다. */
+/**
+ * 위치가 답안 밖으로 나가거나 뒤집힌 코멘트는 버리고,
+ * 남은 것은 말이 되는 자리로 옮겨 붙인다.
+ *
+ * 모델이 주는 위치는 곧잘 어중간한 데서 잘린다 — `…나뉜다. (가` 처럼 여는 괄호 뒤나
+ * 낱말 한복판에서 끝나면, 칠한 자리가 무엇을 가리키는지 읽는 쪽에서 알 수 없다.
+ */
 function sanitizeComments(comments: InlineComment[], text: string): InlineComment[] {
   return comments
-    .map((comment) => ({
-      ...comment,
-      start: Math.max(0, Math.min(comment.start, text.length)),
-      end: Math.max(0, Math.min(comment.end, text.length)),
-    }))
+    .map((comment) => {
+      const start = Math.max(0, Math.min(comment.start, text.length));
+      const end = Math.max(0, Math.min(comment.end, text.length));
+      return { ...comment, ...snapRange(text, start, end) };
+    })
     .filter((comment) => comment.end > comment.start)
     .sort((a, b) => a.start - b.start);
 }
@@ -180,6 +187,18 @@ export function rubricItemsFor(input: CorrectionInput): RubricItem[] {
 }
 
 /**
+ * 구간을 어디서 끊을지. 두 경로가 같은 말을 쓰도록 한곳에 둔다.
+ *
+ * 코드도 받은 위치를 경계로 옮겨 붙이지만(`lib/work/snap.ts`), 애초에 맞게 오면
+ * 옮길 거리가 짧아 코멘트가 가리키던 대목이 덜 흔들린다.
+ */
+const BOUNDARY_RULE =
+  "- **구간은 말이 되는 자리에서 끊어라.** 문장 하나가 기본이다.\n" +
+  "  문장이 길면 절 단위로 끊되, 낱말 한복판이나 여는 괄호 뒤에서 끝내지 마라.\n" +
+  "  (`…나뉜다. (가` 처럼 잘리면 학생은 무엇을 가리키는지 알 수 없다.)\n" +
+  "  여는 괄호나 따옴표를 열었으면 닫는 데까지 넣어라.";
+
+/**
  * 첨삭 프롬프트를 만든다.
  * `manual` 이면 claude.ai 에 그대로 붙여 넣을 수 있게 JSON 형식 안내를 뒤에 붙인다.
  */
@@ -197,10 +216,12 @@ export async function buildCorrectionPrompt(
   const positionRule = options.manual
     ? "- `quote` 는 답안에서 **글자 그대로 옮긴 짧은 대목**이다. 10~40자가 알맞다.\n" +
       "  한 글자라도 다르면 프로그램이 그 자리를 찾지 못한다. 줄임표나 따옴표를 덧붙이지 마라.\n" +
-      "  글자 번호는 세지 않아도 된다."
+      "  글자 번호는 세지 않아도 된다.\n" +
+      BOUNDARY_RULE
     : "- `start` · `end` 는 **답안 원문의 문자 위치**다. 0 부터 세고 `end` 는 포함하지 않는다.\n" +
       "  아래 답안은 줄 번호나 칸 번호가 아니라 글자를 이어 붙인 것이고, 위치는 그 글자 기준이다.\n" +
-      "- 반드시 그 구간의 글자를 다시 확인하고 위치를 정확히 잡아라. 어긋나면 학생이 엉뚱한 곳을 본다.";
+      "- 반드시 그 구간의 글자를 다시 확인하고 위치를 정확히 잡아라. 어긋나면 학생이 엉뚱한 곳을 본다.\n" +
+      BOUNDARY_RULE;
 
   const prompt = fillPrompt(template, {
     positionRule,
