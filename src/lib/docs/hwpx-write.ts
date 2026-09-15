@@ -35,6 +35,10 @@ const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 /**
  * 문단 하나. 한글은 빈 문단도 `<hp:run>` 이 있어야 자리를 잡는다.
  * `id` 는 문서 안에서 겹치지만 않으면 된다.
+ *
+ * `<hp:linesegarray>` 는 **넣지 않는다.** 그것은 한글이 계산해 둔 줄 나눔을 적어 두는
+ * 자리라, 글자 폭을 모르는 우리가 지어내면 한 문단이 통째로 한 줄에 겹쳐 찍힌다.
+ * 비워 두면 한글이 열면서 스스로 줄을 나눈다.
  */
 function paragraph(text: string, style: Style, id: number): string {
   const runs = text
@@ -45,7 +49,6 @@ function paragraph(text: string, style: Style, id: number): string {
   return (
     `<hp:p id="${id}" paraPrIDRef="${PARA_PR[style]}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
     `<hp:run charPrIDRef="${CHAR_PR[style]}">${runs}</hp:run>` +
-    `<hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1000" textheight="1000" baseline="850" spacing="600" horzpos="0" horzsize="42520" flags="393216"/></hp:linesegarray>` +
     `</hp:p>`
   );
 }
