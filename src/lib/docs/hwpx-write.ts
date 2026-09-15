@@ -14,11 +14,38 @@ import { zipSync } from "fflate";
  */
 
 /** 문단에 입히는 모양. header.xml 에 정의해 둔 것과 번호가 맞아야 한다. */
-type Style = "title" | "heading" | "body" | "question" | "note";
+type Style =
+  | "title"
+  | "heading"
+  | "body"
+  | "question"
+  | "note"
+  /** 제시문 머리 · 본문 — 둘이 이어져 하나의 테두리 상자를 이룬다 */
+  | "passageHead"
+  | "passage";
 
-const CHAR_PR: Record<Style, number> = { title: 1, heading: 2, body: 0, question: 0, note: 3 };
+const CHAR_PR: Record<Style, number> = {
+  title: 1,
+  heading: 2,
+  body: 0,
+  question: 0,
+  note: 3,
+  passageHead: 2,
+  passage: 0,
+};
 // 논제는 번호를 내어쓰기로 빼서 `[문제 1]` 이 왼쪽으로 튀어나오게 한다.
-const PARA_PR: Record<Style, number> = { title: 1, heading: 2, body: 0, question: 3, note: 2 };
+const PARA_PR: Record<Style, number> = {
+  title: 1,
+  heading: 2,
+  body: 0,
+  question: 3,
+  note: 2,
+  passageHead: 4,
+  passage: 5,
+};
+
+/** 굵게 쓰는 글자 모양 — `[문제 1]` 과 끝 괄호의 조건에 쓴다 */
+const BOLD_CHAR_PR = 4;
 
 function escapeXml(value: string): string {
   return value
@@ -41,27 +68,46 @@ const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
  * 자리라, 글자 폭을 모르는 우리가 지어내면 한 문단이 통째로 한 줄에 겹쳐 찍힌다.
  * 비워 두면 한글이 열면서 스스로 줄을 나눈다.
  */
-function paragraph(
-  text: string,
-  style: Style,
-  options: { pageBreak?: boolean } = {},
-): string {
-  const runs = text
+/** 문단을 이루는 글 조각. 한 문단 안에서 굵기를 달리하려고 나눈다. */
+export interface Piece {
+  text: string;
+  bold?: boolean;
+}
+
+function runXml(piece: Piece, style: Style): string {
+  const body = piece.text
     .split("\n")
     .map((line) => `<hp:t>${escapeXml(line)}</hp:t>`)
     .join("<hp:lineBreak/>");
+  const charPr = piece.bold ? BOLD_CHAR_PR : CHAR_PR[style];
+  return `<hp:run charPrIDRef="${charPr}">${body}</hp:run>`;
+}
 
+function paragraph(
+  pieces: string | Piece[],
+  style: Style,
+  options: { pageBreak?: boolean } = {},
+): string {
+  const list = typeof pieces === "string" ? [{ text: pieces }] : pieces;
   return (
     `<hp:p paraPrIDRef="${PARA_PR[style]}" styleIDRef="0" pageBreak="${options.pageBreak ? 1 : 0}" columnBreak="0" merged="0">` +
-    `<hp:run charPrIDRef="${CHAR_PR[style]}">${runs}</hp:run>` +
+    list.map((piece) => runXml(piece, style)).join("") +
     `</hp:p>`
   );
 }
 
 /** 표 안 칸 하나. 칸마다 제 문단을 품는다. */
-function cell(text: string, col: number, row: number, width: number, height: number): string {
+interface Cellspec {
+  text: string;
+  width: number;
+  /** 바탕을 칠할지 — 라벨 칸만 칠한다 */
+  shaded?: boolean;
+}
+
+function cell(spec: Cellspec, col: number, row: number, height: number): string {
+  const { text, width } = spec;
   return (
-    `<hp:tc name="" header="${row === 0 ? 1 : 0}" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="2">` +
+    `<hp:tc name="" header="${row === 0 ? 1 : 0}" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="${spec.shaded ? 3 : 2}">` +
     `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">` +
     `<hp:p paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
     `<hp:run charPrIDRef="0"><hp:t>${escapeXml(text)}</hp:t></hp:run>` +
@@ -70,7 +116,8 @@ function cell(text: string, col: number, row: number, width: number, height: num
     `<hp:cellAddr colAddr="${col}" rowAddr="${row}"/>` +
     `<hp:cellSpan colSpan="1" rowSpan="1"/>` +
     `<hp:cellSz width="${width}" height="${height}"/>` +
-    `<hp:cellMargin left="510" right="510" top="141" bottom="141"/>` +
+    // 라벨 칸은 좁아서 여백을 두면 글자가 들어가지 못한다.
+    `<hp:cellMargin left="${spec.shaded ? 0 : 510}" right="${spec.shaded ? 0 : 510}" top="141" bottom="141"/>` +
     `</hp:tc>`
   );
 }
@@ -79,21 +126,21 @@ function cell(text: string, col: number, row: number, width: number, height: num
  * 표 하나. 실제 대학 기출 문제지의 응시자 정보 칸을 본떴다.
  * 표는 문단 안에 들어간다 — OWPML 이 그렇게 생겼다.
  */
-function table(rows: string[][], widths: number[], rowHeight: number): string {
-  const total = widths.reduce((sum, width) => sum + width, 0);
+function table(rows: Cellspec[][], rowHeight: number, align: "LEFT" | "CENTER" | "RIGHT"): string {
+  const total = rows[0].reduce((sum, c) => sum + c.width, 0);
   const body = rows
     .map(
       (cells, row) =>
         `<hp:tr>` +
-        cells.map((text, col) => cell(text, col, row, widths[col], rowHeight)).join("") +
+        cells.map((spec, col) => cell(spec, col, row, rowHeight)).join("") +
         `</hp:tr>`,
     )
     .join("");
 
   return (
-    `<hp:tbl id="" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="1" rowCnt="${rows.length}" colCnt="${widths.length}" cellSpacing="0" borderFillIDRef="2" noAdjust="0">` +
+    `<hp:tbl id="" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="1" rowCnt="${rows.length}" colCnt="${rows[0].length}" cellSpacing="0" borderFillIDRef="2" noAdjust="0">` +
     `<hp:sz width="${total}" widthRelTo="ABSOLUTE" height="${rowHeight * rows.length}" heightRelTo="ABSOLUTE" protect="0"/>` +
-    `<hp:pos treatAsChar="0" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="CENTER" vertOffset="0" horzOffset="0"/>` +
+    `<hp:pos treatAsChar="0" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="${align}" vertOffset="0" horzOffset="0"/>` +
     `<hp:outMargin left="0" right="0" top="0" bottom="1417"/>` +
     `<hp:inMargin left="510" right="510" top="141" bottom="141"/>` +
     body +
@@ -106,20 +153,35 @@ function table(rows: string[][], widths: number[], rowHeight: number): string {
  * section0.xml 이 가리키는 번호(`charPrIDRef` · `paraPrIDRef`)가 여기 다 있어야
  * 한글이 문서를 연다. 없는 번호를 가리키면 파일이 깨진 것으로 본다.
  */
-function borderFill(id: number, type: "NONE" | "SOLID"): string {
-  const side = `type="${type}" width="0.12 mm" color="#000000"`;
+function borderFill(id: number, type: "NONE" | "SOLID", face = "none", width = "0.12 mm"): string {
+  const side = `type="${type}" width="${width}" color="#000000"`;
   return (
     `<hh:borderFill id="${id}" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">` +
     `<hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>` +
     `<hh:leftBorder ${side}/><hh:rightBorder ${side}/>` +
     `<hh:topBorder ${side}/><hh:bottomBorder ${side}/>` +
     `<hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>` +
+    `<hc:fillBrush><hc:winBrush faceColor="${face}" hatchColor="#000000" alpha="0"/></hc:fillBrush>` +
     `</hh:borderFill>`
   );
 }
 
+/** 응시자 칸의 라벨 바탕색. 연세대 문제지에서 그대로 재 온 값이다. */
+const LABEL_FILL = "#e3dcc1";
+
+/**
+ * 문서가 쓰는 글꼴. 번호는 `charPr` 의 `fontRef` 가 가리킨다.
+ *
+ * 파일에 심지 않고 **이름으로만** 부른다. 선생님 컴퓨터에 깔려 있으면 그대로 뜨고,
+ * 없으면 한글이 비슷한 것으로 바꿔 놓는다. 글꼴을 파일에 심으려면 한컴 고유 형식으로
+ * 묶어야 해서 밖에서 만들기 어렵다.
+ */
+const FONTS = ["함초롬바탕", "함초롬돋움", "연세제목체"];
+/** 제목에 쓰는 글꼴 번호 — 연세제목체 */
+const TITLE_FONT = 2;
+
 function headerXml(): string {
-  const fonts = ["함초롬바탕", "함초롬돋움"]
+  const fonts = FONTS
     .map(
       (name, index) =>
         `<hh:font id="${index}" face="${name}" type="TTF" isEmbedded="0">` +
@@ -131,20 +193,22 @@ function headerXml(): string {
   // 한글 · 라틴 · 한자 … 일곱 갈래 모두에 같은 글꼴을 물린다.
   const LANGS = ["hangul", "latin", "hanja", "japanese", "other", "symbol", "user"];
   const fontfaces = LANGS.map(
-    (lang) => `<hh:fontface lang="${lang.toUpperCase()}" fontCnt="2">${fonts}</hh:fontface>`,
+    (lang) => `<hh:fontface lang="${lang.toUpperCase()}" fontCnt="${FONTS.length}">${fonts}</hh:fontface>`,
   ).join("");
 
   /** 글자 모양 — 0 본문, 1 제목, 2 소제목, 3 덧붙임 */
   const charShapes = [
-    { id: 0, size: 1000, bold: 0, color: "#000000" },
-    { id: 1, size: 1600, bold: 1, color: "#000000" },
-    { id: 2, size: 1200, bold: 1, color: "#000000" },
-    { id: 3, size: 900, bold: 0, color: "#666666" },
+    { id: 0, size: 1000, bold: 0, color: "#000000", font: 0 },
+    // 제목만 연세제목체. 굵기는 글꼴이 이미 무거워서 따로 주지 않는다.
+    { id: 1, size: 1600, bold: 0, color: "#000000", font: TITLE_FONT },
+    { id: 2, size: 1200, bold: 1, color: "#000000", font: 0 },
+    { id: 3, size: 900, bold: 0, color: "#666666", font: 0 },
+    { id: 4, size: 1000, bold: 1, color: "#000000", font: 0 },
   ]
     .map(
       (shape) =>
         `<hh:charPr id="${shape.id}" height="${shape.size}" textColor="${shape.color}" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="1">` +
-        `<hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>` +
+        `<hh:fontRef hangul="${shape.font}" latin="${shape.font}" hanja="${shape.font}" japanese="${shape.font}" other="${shape.font}" symbol="${shape.font}" user="${shape.font}"/>` +
         `<hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>` +
         `<hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>` +
         `<hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>` +
@@ -161,6 +225,9 @@ function headerXml(): string {
     { id: 2, align: "LEFT", indent: 0, prev: 900, next: 300 },
     // 논제 — 번호가 왼쪽으로 튀어나오게 내어쓴다(음수 들여쓰기).
     { id: 3, align: "JUSTIFY", indent: -1600, prev: 800, next: 300 },
+    // 제시문 머리 · 본문 — 테두리를 물리고 `connect` 로 이어 붙여 하나의 상자를 만든다.
+    { id: 4, align: "LEFT", indent: 0, prev: 300, next: 200, box: "head" },
+    { id: 5, align: "JUSTIFY", indent: 1000, prev: 0, next: 200, box: "body" },
   ]
     .map(
       (shape) =>
@@ -175,7 +242,10 @@ function headerXml(): string {
         `<hc:prev value="${shape.prev}" unit="HWPUNIT"/><hc:next value="${shape.next}" unit="HWPUNIT"/>` +
         `</hh:margin>` +
         `<hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/>` +
-        `<hh:border borderFillIDRef="1" offsetLeft="0" offsetRight="0" offsetTop="0" offsetBottom="0" connect="0" ignoreMargin="0"/>` +
+        (shape.box
+          ? // 잇따르는 문단끼리 테두리를 하나로 잇는다. 그래야 제시문 전체가 한 상자가 된다.
+            `<hh:border borderFillIDRef="4" offsetLeft="600" offsetRight="600" offsetTop="${shape.box === "head" ? 400 : 0}" offsetBottom="${shape.box === "head" ? 0 : 400}" connect="1" ignoreMargin="0"/>`
+          : `<hh:border borderFillIDRef="1" offsetLeft="0" offsetRight="0" offsetTop="0" offsetBottom="0" connect="0" ignoreMargin="0"/>`) +
         `</hh:paraPr>`,
     )
     .join("");
@@ -186,15 +256,18 @@ function headerXml(): string {
     `<hh:beginNum page="1" footnote="1" endnote="1" pic="1" tbl="1" equation="1"/>` +
     `<hh:refList>` +
     `<hh:fontfaces itemCnt="${LANGS.length}">${fontfaces}</hh:fontfaces>` +
-    // 1 = 테두리 없음(글자·문단이 가리킨다), 2 = 실선(표가 가리킨다).
-    `<hh:borderFills itemCnt="2">` +
+    // 1 = 테두리 없음(글자·문단이 가리킨다), 2 = 실선, 3 = 실선 + 라벨 바탕색.
+    // 1 없음 · 2 실선 · 3 실선+라벨색 · 4 제시문 상자(얇은 실선)
+    `<hh:borderFills itemCnt="4">` +
     borderFill(1, "NONE") +
     borderFill(2, "SOLID") +
+    borderFill(3, "SOLID", LABEL_FILL) +
+    borderFill(4, "SOLID", "none", "0.1 mm") +
     `</hh:borderFills>` +
-    `<hh:charProperties itemCnt="4">${charShapes}</hh:charProperties>` +
+    `<hh:charProperties itemCnt="5">${charShapes}</hh:charProperties>` +
     `<hh:tabProperties itemCnt="1"><hh:tabPr id="0" autoTabLeft="0" autoTabRight="0"/></hh:tabProperties>` +
     `<hh:numberings itemCnt="0"/>` +
-    `<hh:paraProperties itemCnt="4">${paraShapes}</hh:paraProperties>` +
+    `<hh:paraProperties itemCnt="6">${paraShapes}</hh:paraProperties>` +
     `<hh:styles itemCnt="1">` +
     `<hh:style id="0" type="PARA" name="바탕글" engName="Normal" paraPrIDRef="0" charPrIDRef="0" nextStyleIDRef="0" langID="1042" lockForm="0"/>` +
     `</hh:styles>` +
@@ -214,7 +287,8 @@ function sectionXml(paragraphs: string[]): string {
     // 실제 대학 기출 파일을 열어 보니 세로 A4 도 landscape="WIDELY" 였다.
     // 이름과 달리 가로/세로를 뜻하는 값이 아니다 — 크기(width < height)가 방향을 정한다.
     `<hp:pagePr landscape="WIDELY" width="59528" height="84188" gutterType="LEFT_ONLY">` +
-    `<hp:margin header="4252" footer="4252" gutter="0" left="5669" right="5669" top="5669" bottom="5669"/>` +
+    // 연세대 문제지의 본문 영역(좌 65pt · 우 49pt · 상하 넉넉히)에 맞춘다.
+    `<hp:margin header="4252" footer="4252" gutter="0" left="6500" right="4900" top="5100" bottom="5000"/>` +
     `</hp:pagePr>` +
     `<hp:footNotePr>` +
     `<hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/>` +
@@ -346,14 +420,14 @@ function passageLabel(label: string): string {
 
 /** 표지 · 본문을 이루는 한 덩어리 */
 type Block =
-  | { kind: "text"; text: string; style: Style }
-  | { kind: "table"; rows: string[][]; widths: number[]; rowHeight: number };
+  | { kind: "text"; text: string | Piece[]; style: Style }
+  | { kind: "table"; rows: Cellspec[][]; rowHeight: number; align: "LEFT" | "CENTER" | "RIGHT" };
 
 function render(block: Block): string {
   if (block.kind === "table") {
     return (
       `<hp:p paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
-      `<hp:run charPrIDRef="0">${table(block.rows, block.widths, block.rowHeight)}</hp:run>` +
+      `<hp:run charPrIDRef="0">${table(block.rows, block.rowHeight, block.align)}</hp:run>` +
       `</hp:p>`
     );
   }
@@ -376,15 +450,23 @@ export function buildHandoutHwpx(input: HandoutInput): Uint8Array {
 
   const blocks: Block[] = [
     { kind: "text", text: `${input.univName} ${input.examTitle}`, style: "title" },
-    // 응시자가 손으로 적는 칸.
+    // 응시자가 손으로 적는 칸. 연세대 문제지에서 자리와 색을 그대로 재 왔다 —
+    // 좁은 라벨 칸(바탕색)과 넓은 빈칸이 번갈아 서고, 오른쪽 끝에 붙는다.
+    // 라벨 칸이 좁아 글자가 한 자씩 세로로 감긴다. 그게 원본 모양이다.
     {
       kind: "table",
       rows: [
-        ["모 집 단 위", "수 험 번 호", "성 명"],
-        ["", "", ""],
+        [
+          { text: "모집단위", width: 1500, shaded: true },
+          { text: "", width: 8770 },
+          { text: "수험번호", width: 1500, shaded: true },
+          { text: "", width: 8170 },
+          { text: "성명", width: 1500, shaded: true },
+          { text: "", width: 7730 },
+        ],
       ],
-      widths: [17000, 15000, 13000],
-      rowHeight: 1400,
+      rowHeight: 3770,
+      align: "RIGHT",
     },
     {
       kind: "text",
@@ -402,20 +484,24 @@ export function buildHandoutHwpx(input: HandoutInput): Uint8Array {
     blocks.push({
       kind: "text",
       text: `제시문 ${passageLabel(passage.label)}`,
-      style: "heading",
+      style: "passageHead",
     });
     // 빈 줄로 나뉜 덩어리를 문단 하나씩으로 옮긴다. 문단 첫 칸은 문단 모양이 들여 준다.
     for (const chunk of passage.text.split(/\n\s*\n/)) {
       const text = chunk.trim();
-      if (text) blocks.push({ kind: "text", text, style: "body" });
+      if (text) blocks.push({ kind: "text", text, style: "passage" });
     }
   }
 
   for (const question of input.questions) {
-    // 번호와 논제가 한 문단으로 이어진다 — 실제 문제지가 그 꼴이다.
+    // 번호와 논제가 한 문단으로 이어지고, 번호와 끝 조건만 굵다 — 실제 문제지가 그 꼴이다.
     blocks.push({
       kind: "text",
-      text: `[문제 ${question.number}] ${question.prompt.trim()}${condition(question)}`,
+      text: [
+        { text: `[문제 ${question.number}] `, bold: true },
+        { text: question.prompt.trim() },
+        { text: condition(question), bold: true },
+      ].filter((piece) => piece.text.length > 0),
       style: "question",
     });
   }

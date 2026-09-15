@@ -155,17 +155,50 @@ check("검수 안내", text.includes("PDF 로 저장해 올려 주세요"));
 
 // ── 문제지 머리 ───────────────────────────────────────────
 console.log("\n문제지 머리");
-check("응시자 칸 — 모집단위", text.includes("모 집 단 위"));
-check("응시자 칸 — 수험번호", text.includes("수 험 번 호"));
-check("응시자 칸 — 성명", text.includes("성 명"));
+check("응시자 칸 — 모집단위", text.includes("모집단위"));
+check("응시자 칸 — 수험번호", text.includes("수험번호"));
+check("응시자 칸 — 성명", text.includes("성명"));
 check("안내 줄 · 총점", text.includes("※ 아래 제시문을 읽고 문제에 답하시오. (총 100점)"));
 
 const sectionXmlText = decoder.decode(entries["Contents/section0.xml"]);
+const headerXmlText = decoder.decode(entries["Contents/header.xml"]);
 check("표가 들어갔는가", /<hp:tbl\b/.test(sectionXmlText),
   `${(sectionXmlText.match(/<hp:tc\b/g) ?? []).length}칸`);
 check("표는 실선 테두리(borderFill 2)", /<hp:tbl[^>]*borderFillIDRef="2"/.test(sectionXmlText));
+// 라벨 칸만 바탕을 칠한다 — 연세대 문제지에서 재 온 베이지.
+check(
+  "라벨 칸 3개만 바탕색(borderFill 3)",
+  (sectionXmlText.match(/<hp:tc[^>]*borderFillIDRef="3"/g) ?? []).length === 3,
+);
+check("표는 오른쪽 끝에 붙는다", /<hp:pos[^>]*horzAlign="RIGHT"/.test(sectionXmlText));
+
+check("라벨 바탕색 #e3dcc1", headerXmlText.includes('faceColor="#e3dcc1"'));
+check("제목 글꼴 연세제목체", headerXmlText.includes("연세제목체"));
+check(
+  "제목만 그 글꼴을 쓴다",
+  /<hh:charPr id="1"[\s\S]*?<hh:fontRef hangul="2"/.test(headerXmlText),
+);
 // 한글이 계산할 자리다. 우리가 지어 넣으면 한 문단이 한 줄에 겹쳐 찍힌다.
 check("linesegarray 를 넣지 않았는가", !sectionXmlText.includes("linesegarray"));
+
+// ── 제시문 상자 · 굵은 조각 ───────────────────────────────
+console.log("\n제시문 상자와 굵기");
+// 제시문 머리(4)와 본문(5)이 잇따라야 테두리가 하나로 이어진다.
+check("제시문은 테두리 문단 모양을 쓴다", /paraPrIDRef="[45]"/.test(sectionXmlText));
+check(
+  "제시문 테두리가 이어 붙는다(connect)",
+  /<hh:paraPr id="4"[\s\S]*?connect="1"/.test(headerXmlText) &&
+    /<hh:paraPr id="5"[\s\S]*?connect="1"/.test(headerXmlText),
+);
+check("제시문 상자는 얇은 실선", headerXmlText.includes('<hh:borderFill id="4"') &&
+  /<hh:borderFill id="4"[\s\S]*?<hh:leftBorder type="SOLID" width="0.1 mm"/.test(headerXmlText));
+// 문제 번호와 끝 조건만 굵다.
+check("문제 번호가 굵다", sectionXmlText.includes('<hp:run charPrIDRef="4"><hp:t>[문제 1] </hp:t>'));
+check(
+  "끝 조건이 굵다",
+  sectionXmlText.includes('<hp:run charPrIDRef="4"><hp:t> (800자 내외, 40점)</hp:t>'),
+);
+check("논제 본문은 굵지 않다", sectionXmlText.includes('<hp:run charPrIDRef="0"><hp:t>제시문 (가)와 (나)를'));
 
 // XML 특수문자가 살아 돌아오는지 — 이스케이프가 어긋나면 파일이 깨진다.
 check("꺾쇠 · 따옴표 · 앰퍼샌드", text.includes('<집중>과 "분산"') && text.includes("5 < 7 & 3 > 1"));
