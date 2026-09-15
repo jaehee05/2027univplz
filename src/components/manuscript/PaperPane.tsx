@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-
+import { PdfPages } from "@/components/manuscript/PdfPages";
 import type { Passage } from "@/lib/types/exam";
 
 /** 문제지에 실린 논제 하나 */
@@ -28,7 +27,15 @@ interface Props {
   version: string;
 }
 
-/** 왼쪽 문제지 칸. 올려 둔 PDF 를 그대로 띄우고, 필요하면 글로 바꿔 본다. */
+/**
+ * 왼쪽 문제지 칸.
+ *
+ * 올려 둔 PDF 를 **쪽마다 그림으로 그려** 이어 붙인다(`PdfPages`).
+ * 브라우저 PDF 뷰어를 띄우지 않는다 — 뷰어가 제 도구 모음과 스크롤을 달고 나와
+ * 칸 안에 칸이 생기고, 답안을 쓰다 말고 뷰어를 조작하게 된다.
+ *
+ * PDF 가 없을 때만 글로 보여 준다(한글 문서로 올린 기출).
+ */
 export function PaperPane({
   assignmentId,
   questions,
@@ -39,13 +46,8 @@ export function PaperPane({
   pageTo,
   version,
 }: Props) {
-  const [mode, setMode] = useState<"pdf" | "text">(hasPdf ? "pdf" : "text");
-
-  // 서버가 배정된 쪽만 잘라서 내보내므로 여기서는 통째로 열면 된다.
-  // view=FitH — 브라우저 PDF 뷰어를 너비 맞춤으로 열어 준다(칸이 좁아도 글자가 읽힌다).
-  const src = `/api/assignments/${assignmentId}/paper?v=${encodeURIComponent(version)}#view=FitH`;
-  // 새 창은 보통 넓으니 그대로 연다.
-  const popout = `/api/assignments/${assignmentId}/paper?v=${encodeURIComponent(version)}`;
+  // 서버가 배정된 쪽만 잘라서 내보내므로 여기서는 통째로 받으면 된다.
+  const src = `/api/assignments/${assignmentId}/paper?v=${encodeURIComponent(version)}`;
 
   return (
     <section className="flex h-full min-h-0 flex-col">
@@ -61,57 +63,26 @@ export function PaperPane({
             </span>
           ) : null}
           {hasPdf ? (
-            <div className="flex rounded-md border border-neutral-300 text-xs">
-              {(["pdf", "text"] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setMode(value)}
-                  className={[
-                    "px-2 py-1",
-                    mode === value ? "bg-neutral-900 text-white" : "text-neutral-600",
-                    value === "pdf" ? "rounded-l-md" : "rounded-r-md",
-                  ].join(" ")}
-                >
-                  {value === "pdf" ? "원본" : "글자"}
-                </button>
-              ))}
-            </div>
+            <a
+              href={src}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs"
+            >
+              새 창
+            </a>
           ) : null}
-          <a
-            href={popout}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md border border-neutral-300 px-2 py-1 text-xs"
-          >
-            새 창
-          </a>
         </div>
       </div>
 
-      {mode === "pdf" && hasPdf ? (
-        <object
-          data={src}
-          type="application/pdf"
-          className="min-h-0 w-full flex-1 rounded-md border border-neutral-200 bg-neutral-50"
-        >
-          {/* 브라우저가 PDF 를 못 열 때 */}
-          <div className="p-4 text-sm text-neutral-600">
-            이 브라우저에서는 PDF 를 바로 열 수 없습니다.{" "}
-            <a href={popout} target="_blank" rel="noreferrer" className="underline">
-              새 창에서 열기
-            </a>
-            <button
-              type="button"
-              onClick={() => setMode("text")}
-              className="ml-2 underline underline-offset-2"
-            >
-              글자로 보기
-            </button>
-          </div>
-        </object>
+      {hasPdf ? (
+        // 스크롤은 이 칸 하나로 끝난다. 안쪽에 또 스크롤이 생기지 않게 한다.
+        <PdfPages
+          src={src}
+          className="min-h-0 flex-1 overflow-y-auto rounded-md border border-neutral-200 bg-neutral-100 p-3"
+        />
       ) : (
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto rounded-md border border-neutral-200 p-4">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto rounded-md border border-neutral-200 bg-white p-4">
           <div>
             <h3 className="text-sm font-semibold text-neutral-500">논제</h3>
             <ol className="mt-1 space-y-3">
@@ -132,7 +103,9 @@ export function PaperPane({
                     {questions.length > 1 ? (
                       <p className="text-sm font-bold">
                         문제 {question.number}
-                        {on ? <span className="ml-1.5 font-normal text-amber-700">지금 쓰는 문항</span> : null}
+                        {on ? (
+                          <span className="ml-1.5 font-normal text-amber-700">지금 쓰는 문항</span>
+                        ) : null}
                       </p>
                     ) : null}
                     <p className="mt-0.5 leading-7 whitespace-pre-wrap">{question.prompt}</p>
@@ -149,7 +122,7 @@ export function PaperPane({
             </div>
           ))}
 
-          {!hasPdf && passages.length === 0 ? (
+          {passages.length === 0 ? (
             <p className="text-sm text-neutral-500">
               올려 둔 문제지가 없습니다. 논제만 보고 쓰시면 됩니다.
             </p>
