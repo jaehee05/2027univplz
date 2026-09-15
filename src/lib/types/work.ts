@@ -1,5 +1,7 @@
 /** 학생 · 과제 · 답안 · 첨삭 타입. */
 
+import type { Approval } from "@/lib/types/user";
+
 export type AssignmentStatus =
   | "assigned" // 내줬고 아직 손대지 않음
   | "writing" // 쓰는 중 (자동 저장됨)
@@ -21,6 +23,8 @@ export interface StudentRow {
   uid: string;
   email: string;
   displayName: string;
+  /** 선생님이 받아 줬는지. 예전 계정(값 없음)은 approved 로 본다. */
+  approval: Approval;
   active: boolean;
   createdAt: string | null;
   /** 목록에서 바로 보여 줄 집계 */

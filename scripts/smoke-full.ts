@@ -160,11 +160,7 @@ async function main() {
     });
     console.log(`  ${confirmed.analysis.status} · 항목 ${confirmed.analysis.rubric.items.length}개`);
 
-    step("학생 초대 · 가입");
-    const invite = await api("/api/invites", {
-      method: "POST",
-      body: JSON.stringify({ label: "점검용", role: "student", validDays: 1 }),
-    });
+    step("학생 가입 신청 · 선생님 승인");
     const email = `smoke-${Date.now()}@example.com`;
     const signUp = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${KEY}`,
@@ -183,12 +179,24 @@ async function main() {
       body: JSON.stringify({
         idToken: created.idToken,
         displayName: "점검학생",
-        inviteCode: invite.code,
       }),
     });
     const registered = await register.json();
     if (!register.ok) throw new Error(`학생 등록 실패: ${registered.error}`);
-    console.log(`  ${email} · ${registered.role}`);
+    if (registered.approval !== "pending") {
+      throw new Error(`신청 직후에는 승인 대기여야 합니다: ${registered.approval}`);
+    }
+
+    // 받아 주기 전에는 학생 화면이 열리면 안 된다.
+    const early = await api(`/api/students/${studentUid}`, {
+      method: "PATCH",
+      body: JSON.stringify({ approval: "approved" }),
+    });
+    const approved = (early.students ?? []).find(
+      (row: { uid: string }) => row.uid === studentUid,
+    );
+    if (approved?.approval !== "approved") throw new Error("승인이 반영되지 않았습니다.");
+    console.log(`  ${email} · ${registered.role} · 신청 → 승인`);
 
     // claim 이 붙은 토큰으로 다시 받아 세션을 만든다.
     const studentToken = await auth.createCustomToken(studentUid!, { role: "student" });

@@ -53,6 +53,7 @@ async function main() {
     ["내 과제(학생 화면)", "/dashboard"],
     ["첨삭 결과 목록(학생 화면)", "/history"],
     ["내 정보(학생 화면)", "/me"],
+    ["승인 대기", "/pending"],
     ["쓰기", `/write/${target.id}`],
     ["결과", `/results/${target.id}`],
     ["첨삭 확인", `/admin/corrections/${target.id}`],

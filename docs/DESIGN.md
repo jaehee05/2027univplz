@@ -94,8 +94,8 @@ prompts/               # 프롬프트를 파일로 분리해 수정 가능하게
 ## Firestore 스키마
 
 ```
-users/{uid}              role, email, displayName, teacherId?, active, createdAt
-invites/{code}           role, label, createdBy, createdAt, expiresAt, usedBy?, usedAt?
+users/{uid}              role, email, displayName, teacherId?, approval, active, createdAt, approvedAt?
+                         # approval: pending | approved | rejected — 값이 없는 예전 계정은 approved 로 본다
 meta/system              teacherBootstrapped, firstTeacherUid
 
 universities/{univId}    name, slug, order, active, manuscriptSpec
@@ -146,6 +146,9 @@ corrections/{id}         assignmentId, questionId, answerId, studentId, assigned
 ## 보안 규칙 요지 (`firestore.rules`)
 
 - `role`은 `users/{uid}.role`에만 있고 클라이언트는 쓰지 못한다. 서버가 custom claim에도 동기화한다.
+- **역할 claim 은 승인이 끝난 계정에만 심는다.** 이 claim 이 `dal.getCurrent` 의 빠른 통로라,
+  대기 중인 계정에 미리 주면 users 문서를 읽지 않고 그냥 지나가 버린다.
+  거절·중지할 때는 claim 을 걷고 refresh 토큰도 끊는다.
 - 학생은 자기 답안만 읽고 쓰며, `submitted` 이후에는 수정할 수 없다.
 - 첨삭 결과는 teacher가 `published: true`로 바꾸기 전에는 학생이 읽을 수 없다 (규칙 레벨 차단).
 - 채점 기준 확정본·첨삭 결과·사용자 문서는 Admin SDK만 쓴다.
@@ -156,8 +159,10 @@ corrections/{id}         assignmentId, questionId, answerId, studentId, assigned
 ```
 POST   /api/auth/session            로그인 (ID 토큰 → 세션 쿠키)
 DELETE /api/auth/session            로그아웃
-POST   /api/auth/register           가입 확정 (첫 사용자=teacher, 이후=초대 코드)
-GET    POST /api/invites            초대 코드 목록 · 발급 (teacher)
+POST   /api/auth/register           가입 신청 (첫 사용자=teacher, 이후=student 신청)
+GET    /api/auth/me                 내 계정이 쓸 수 있는 상태인지 (승인 대기 화면이 물어본다)
+GET    /api/students                학생 · 가입 신청 목록 (teacher)
+PATCH  /api/students/[uid]          승인 · 거절 · 중지 · 이름 수정 (teacher)
 
 GET  POST   /api/universities                       목록 · 추가(기본 6개 넣기 포함)
 PATCH DELETE /api/universities/[univId]              이름 · 활성 · 삭제
@@ -248,6 +253,10 @@ Claude 구독을 이미 쓰고 있으면 **API 요금 없이** 같은 일을 할
 | 채점 기준 분석 | 문제 + 해설 텍스트 | `question_types` / `rubric` / `answer_style` / `model_answer_patterns` |
 | 첨삭 | 답안 + 논제 + 제시문 + 확정 rubric + 모범답안 | `scores` / `inline_comments` / `overall` / `revised_example` |
 
+학생이 읽을 글(`reason` · `message` · `suggestion` · `overall`)은 **`~입니다` 체**로 쓴다.
+다만 `revisedExample` 은 학생이 시험장에서 낼 답안이므로 논술 평서문(`~이다`)이다 —
+답안에 존댓말을 쓰면 감점이다. 프롬프트 맨 앞에 규칙으로 박아 두었다.
+
 - JSON은 structured outputs(`output_config.format`)로 스키마를 강제하고, 실패 시 1회 재시도 후 오류 상태 저장.
 - 논제·제시문·rubric은 prompt caching 대상으로 앞쪽에 고정 배치 (같은 문항 여러 학생 첨삭 시 비용 절감).
 - 긴 출력이므로 streaming 사용. Vercel Pro의 `maxDuration`을 넉넉히 잡고, 연결이 끊겨도 폴링으로 복구한다.
@@ -279,6 +288,20 @@ Claude 구독을 이미 쓰고 있으면 **API 요금 없이** 같은 일을 할
 | 첨삭 결과지 | 가로 3쪽 × 문항 수 | 1쪽 채점·답안(번호 표시), 2쪽 코멘트(두 단), 3쪽 총평·고쳐 쓴 예시 |
 
 서버 PDF 생성은 Vercel 환경 제약을 고려해 2차 과제로 둔다.
+
+## 가입
+
+학생은 **누구나 신청**하고, 선생님이 명단에서 받아 준다. 첫 계정만 예외로 선생님이 되고
+승인 절차 없이 바로 쓴다.
+
+예전에는 선생님이 초대 코드를 미리 뽑아 학생에게 건넸다. 사람마다 코드를 만들어야 했고,
+학생이 코드를 잃어버리거나 코드가 새면 아무나 들어올 수 있었다. 지금은 코드가 오가지 않는다.
+
+- 신청한 계정은 `approval: "pending"` 이고 **역할 claim 이 없다**.
+- 아직 못 쓰는 계정이 화면을 열면 로그인 화면이 아니라 `/pending` 으로 간다 —
+  로그인 화면으로 돌려보내면 학생이 "가입이 안 됐나" 싶어 신청을 반복한다.
+  그 화면은 10초마다 상태를 물어, 선생님이 받아 준 순간 스스로 넘어간다.
+- Route Handler 는 401 이 아니라 **403 과 사유**를 돌려준다.
 
 ## 구현 순서
 

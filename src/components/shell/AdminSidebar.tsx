@@ -21,6 +21,7 @@ const LINKS = [
   {
     href: "/admin/students",
     label: "학생",
+    badge: "waitingStudents" as const,
     path: "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM2.5 20a6.5 6.5 0 0 1 13 0M16 11.5a5.5 5.5 0 0 1 5.5 5.5",
   },
   {
@@ -39,6 +40,8 @@ const LINKS = [
 export interface AdminCounts {
   /** 첨삭·공개를 기다리는 시험지 수 — 목록 옆에 붙는다 */
   pending: number;
+  /** 받아 주기를 기다리는 가입 신청 수 */
+  waitingStudents: number;
 }
 
 export function AdminSidebar({
@@ -60,7 +63,12 @@ export function AdminSidebar({
   const items = LINKS.map((link) => ({
     ...link,
     on: link.exact ? pathname === link.href : pathname.startsWith(link.href),
-    count: link.badge === "pending" ? counts.pending : 0,
+    count:
+      link.badge === "pending"
+        ? counts.pending
+        : link.badge === "waitingStudents"
+          ? counts.waitingStudents
+          : 0,
   }));
 
   const nav = (
@@ -136,9 +144,9 @@ export function AdminSidebar({
             논술 <span className="text-brand-600">첨삭</span>
             <span className="ml-1.5 text-xs font-normal text-neutral-400">관리</span>
           </span>
-          {counts.pending > 0 ? (
+          {counts.pending + counts.waitingStudents > 0 ? (
             <span className="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white tabular-nums">
-              {counts.pending}
+              {counts.pending + counts.waitingStudents}
             </span>
           ) : null}
         </div>

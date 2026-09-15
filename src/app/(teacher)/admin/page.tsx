@@ -2,15 +2,12 @@ import Link from "next/link";
 
 import { requireTeacher } from "@/lib/auth/dal";
 import { AdminNav } from "@/components/admin/AdminNav";
-import { InviteManager } from "@/components/admin/InviteManager";
 import { listUniversities } from "@/lib/exam/store";
-import { listInvites } from "@/lib/invites/store";
 import { listAssignmentsFor, listStudents } from "@/lib/work/store";
 
 export default async function AdminPage() {
   const user = await requireTeacher();
-  const [invites, students, assignments, universities] = await Promise.all([
-    listInvites(user.uid),
+  const [students, assignments, universities] = await Promise.all([
     listStudents(user.uid),
     listAssignmentsFor("assignedBy", user.uid),
     listUniversities(),
@@ -21,6 +18,8 @@ export default async function AdminPage() {
   const writing = assignments.filter(
     (row) => row.status === "assigned" || row.status === "writing",
   ).length;
+  const waitingStudents = students.filter((row) => row.approval === "pending").length;
+  const roster = students.filter((row) => row.approval === "approved" && row.active).length;
 
   const cards = [
     {
@@ -40,9 +39,10 @@ export default async function AdminPage() {
     { href: "/admin/assignments", label: "쓰는 중", value: writing, hint: "아직 학생 차례" },
     {
       href: "/admin/students",
-      label: "학생",
-      value: students.filter((s) => s.active).length,
-      hint: `대학 ${universities.length}곳 등록`,
+      label: waitingStudents > 0 ? "가입 신청" : "학생",
+      value: waitingStudents > 0 ? waitingStudents : roster,
+      hint: waitingStudents > 0 ? "받아 줄 사람이 있습니다" : `대학 ${universities.length}곳 등록`,
+      alert: waitingStudents > 0,
     },
   ];
 
@@ -79,17 +79,20 @@ export default async function AdminPage() {
         ))}
       </section>
 
-      <section className="mt-8 rounded-2xl border border-neutral-200 bg-white p-5">
-        <h2 className="font-bold">학생 초대</h2>
-        <p className="mt-1 text-sm text-neutral-500">
-          코드를 발급해 학생에게 전달하면, 학생이 가입 화면에서 입력해 계정을 만듭니다.
-        </p>
-        <InviteManager initial={invites} />
-      </section>
-
       <section className="mt-6 rounded-2xl border border-neutral-200 bg-white p-5">
         <h2 className="font-bold">시작하는 순서</h2>
         <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-6 text-neutral-600">
+          <li>
+            학생이{" "}
+            <Link href="/signup" className="underline underline-offset-4">
+              가입 화면
+            </Link>{" "}
+            에서 신청하면{" "}
+            <Link href="/admin/students" className="underline underline-offset-4">
+              학생
+            </Link>{" "}
+            에서 받아 줍니다. 코드를 나눠 줄 필요가 없습니다.
+          </li>
           <li>
             <Link href="/admin/intake" className="underline underline-offset-4">
               기출 올리기

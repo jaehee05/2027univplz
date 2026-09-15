@@ -135,6 +135,8 @@ export async function listStudents(teacherId: string): Promise<StudentRow[]> {
         uid: doc.id,
         email: data.email ?? "",
         displayName: data.displayName ?? "",
+        // 초대 코드로 들어온 예전 계정에는 이 값이 없다 — 이미 받아들인 사람들이다.
+        approval: (data.approval ?? "approved") as StudentRow["approval"],
         active: data.active ?? true,
         createdAt: toIso(data.createdAt),
         assignmentCount: count.total,

@@ -43,18 +43,69 @@ export function StudentManager({ initial }: { initial: StudentRow[] }) {
     await send(student.uid, "DELETE");
   }
 
+  // 받아 주기를 기다리는 신청은 위로 따로 뺀다 — 선생님이 제일 먼저 볼 일이다.
+  const waiting = students.filter((row) => row.approval === "pending");
+  const roster = students.filter((row) => row.approval !== "pending");
+
   if (students.length === 0) {
     return (
-      <p className="mt-4 rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500">
-        아직 학생이 없습니다. 관리 홈에서 초대 코드를 발급해 학생에게 전달하세요.
+      <p className="mt-4 rounded-lg border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
+        아직 학생이 없습니다. 학생이 가입 화면에서 신청하면 여기에 나타납니다.
       </p>
     );
   }
 
   return (
     <div className="mt-4">
-      <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200">
-        {students.map((student) => (
+      {waiting.length > 0 ? (
+        <section className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <h3 className="font-semibold text-amber-900">
+            가입 신청
+            <span className="ml-2 text-sm font-normal tabular-nums">{waiting.length}건</span>
+          </h3>
+          <p className="mt-0.5 text-xs text-amber-800">
+            받아 주면 바로 로그인해 과제를 받을 수 있습니다. 모르는 사람이면 거절하세요.
+          </p>
+
+          <ul className="mt-3 space-y-2">
+            {waiting.map((student) => (
+              <li
+                key={student.uid}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <span className="font-medium">{student.displayName}</span>
+                  <span className="ml-2 text-xs text-neutral-500">{student.email}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2 text-sm">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void send(student.uid, "PATCH", { approval: "approved" })}
+                    className="rounded-lg bg-neutral-900 px-3 py-1.5 font-medium text-white disabled:opacity-40"
+                  >
+                    받기
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!confirm(`${student.displayName} 님의 신청을 거절할까요?`)) return;
+                      void send(student.uid, "PATCH", { approval: "rejected" });
+                    }}
+                    className="rounded-lg border border-neutral-300 px-3 py-1.5 disabled:opacity-40"
+                  >
+                    거절
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white">
+        {roster.map((student) => (
           <li key={student.uid} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
             {editing === student.uid ? (
               <div className="flex flex-wrap items-center gap-2">
@@ -93,7 +144,11 @@ export function StudentManager({ initial }: { initial: StudentRow[] }) {
                 <div>
                   <span className="font-medium">{student.displayName}</span>
                   <span className="ml-2 text-xs text-neutral-400">{student.email}</span>
-                  {!student.active ? (
+                  {student.approval === "rejected" ? (
+                    <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-xs text-neutral-600">
+                      거절됨
+                    </span>
+                  ) : !student.active ? (
                     <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700">
                       중지됨
                     </span>
@@ -114,6 +169,16 @@ export function StudentManager({ initial }: { initial: StudentRow[] }) {
                   >
                     이름 수정
                   </button>
+                  {student.approval === "rejected" ? (
+                    <button
+                      type="button"
+                      onClick={() => void send(student.uid, "PATCH", { approval: "approved" })}
+                      disabled={busy}
+                      className="rounded border border-neutral-300 px-2 py-1 disabled:opacity-50"
+                    >
+                      다시 받기
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void send(student.uid, "PATCH", { active: !student.active })}
@@ -140,6 +205,11 @@ export function StudentManager({ initial }: { initial: StudentRow[] }) {
             )}
           </li>
         ))}
+        {roster.length === 0 ? (
+          <li className="px-4 py-6 text-center text-sm text-neutral-500">
+            받아들인 학생이 아직 없습니다.
+          </li>
+        ) : null}
       </ul>
 
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}

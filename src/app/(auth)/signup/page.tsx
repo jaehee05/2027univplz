@@ -19,7 +19,6 @@ export default function SignupPage() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // 로그인 화면에서 "등록되지 않은 계정"으로 넘어온 경우
@@ -54,7 +53,6 @@ export default function SignupPage() {
       body: JSON.stringify({
         idToken,
         displayName: displayName || user.displayName || "이름 없음",
-        inviteCode: inviteCode || undefined,
       }),
     });
     const data = await response.json().catch(() => ({}));
@@ -63,7 +61,8 @@ export default function SignupPage() {
     // 역할(custom claim)이 담긴 토큰으로 세션을 다시 발급받는다.
     await exchangeSession(user, true);
 
-    router.replace(homeFor(data.role));
+    // 선생님이 받아 주기 전까지는 안내 화면에서 기다린다.
+    router.replace(data.approval === "approved" ? homeFor(data.role) : "/pending");
     router.refresh();
   }
 
@@ -83,7 +82,7 @@ export default function SignupPage() {
       <header>
         <h1 className="text-2xl font-bold">가입</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          첫 계정은 선생님 계정이 됩니다. 학생은 선생님이 발급한 초대 코드가 필요합니다.
+          첫 계정은 선생님 계정이 됩니다. 학생은 신청한 뒤 선생님이 받아 주면 쓸 수 있습니다.
         </p>
       </header>
 
@@ -133,22 +132,12 @@ export default function SignupPage() {
             className="rounded-md border border-neutral-300 px-3 py-2 text-base"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm">
-          초대 코드 <span className="text-neutral-400">(학생만 입력)</span>
-          <input
-            value={inviteCode}
-            onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
-            className="rounded-md border border-neutral-300 px-3 py-2 font-mono text-base tracking-widest"
-            placeholder="ABCD2345"
-          />
-        </label>
-
         <button
           type="submit"
           disabled={busy}
           className="mt-2 rounded-md bg-neutral-900 px-4 py-2.5 font-medium text-white disabled:opacity-50"
         >
-          {busy ? "처리 중…" : pendingUser ? "가입 마치기" : "가입하기"}
+          {busy ? "처리 중…" : pendingUser ? "신청 마치기" : "가입 신청"}
         </button>
       </form>
 
@@ -159,7 +148,7 @@ export default function SignupPage() {
           onClick={() => void run(async () => (await googleSignIn()).user)}
           className="rounded-md border border-neutral-300 px-4 py-2.5 font-medium disabled:opacity-50"
         >
-          구글 계정으로 가입
+          구글 계정으로 신청
         </button>
       )}
 

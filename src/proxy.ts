@@ -5,6 +5,8 @@ import { NextResponse, type NextRequest } from "next/server";
  * 실제 권한 확인은 각 화면 · Route Handler 의 DAL(`lib/auth/dal.ts`)에서 한다.
  */
 const PUBLIC_PATHS = ["/login", "/signup"];
+/** 로그인은 했지만 아직 못 쓰는 계정이 머무는 자리. 쿠키가 있어야 의미가 있다. */
+const SESSION_PATHS = ["/pending"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -15,6 +17,9 @@ export function proxy(request: NextRequest) {
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
+
+  // 승인 대기 화면은 로그인한 사람만 본다. 쿠키가 없으면 위에서 이미 걸러졌다.
+  if (SESSION_PATHS.includes(pathname)) return NextResponse.next();
 
   if (hasSession && PUBLIC_PATHS.includes(pathname)) {
     const url = request.nextUrl.clone();

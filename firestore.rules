@@ -30,14 +30,12 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
-    // ── 사용자 · 초대 ────────────────────────────────────────────────
+    // ── 사용자 ──────────────────────────────────────────────────────
+    // 가입 승인(approval)도 여기에 있다. 학생이 스스로 자기를 승인하지 못하게
+    // 쓰기는 통째로 서버 전용이다 — 받아 주는 것은 선생님 화면을 거친 Admin SDK 뿐이다.
     match /users/{uid} {
       allow read: if isSelf(uid) || isTeacher();
       allow write: if false;               // 서버 전용
-    }
-
-    match /invites/{code} {
-      allow read, write: if false;         // 서버 전용
     }
 
     match /meta/{docId} {

@@ -95,10 +95,6 @@ async function main() {
     uid = (await auth.getUserByEmail(EMAIL)).uid;
     await auth.updateUser(uid, { password: PASSWORD });
   } catch {
-    const invite = await api("/api/invites", {
-      method: "POST",
-      body: JSON.stringify({ label: "확인용", role: "student", validDays: 1 }),
-    });
     const signUp = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${KEY}`, {
       method: "POST",
       body: JSON.stringify({ email: EMAIL, password: PASSWORD, returnSecureToken: true }),
@@ -108,7 +104,12 @@ async function main() {
     await fetch(`${BASE}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken: created.idToken, displayName: "확인용학생", inviteCode: invite.code }),
+      body: JSON.stringify({ idToken: created.idToken, displayName: "확인용학생" }),
+    });
+    // 신청만 된 상태라 선생님이 받아 줘야 쓸 수 있다.
+    await api(`/api/students/${uid}`, {
+      method: "PATCH",
+      body: JSON.stringify({ approval: "approved" }),
     });
   }
 
