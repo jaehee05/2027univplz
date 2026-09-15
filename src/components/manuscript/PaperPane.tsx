@@ -76,10 +76,10 @@ export function PaperPane({
       </div>
 
       {hasPdf ? (
-        // 스크롤은 이 칸 하나로 끝난다. 안쪽에 또 스크롤이 생기지 않게 한다.
+        // 스크롤은 이 칸 하나로 끝난다. 확대하면 가로로도 밀어야 하므로 양쪽 다 연다.
         <PdfPages
           src={src}
-          className="min-h-0 flex-1 overflow-y-auto rounded-md border border-neutral-200 bg-neutral-100 p-3"
+          className="min-h-0 flex-1 overflow-auto rounded-md border border-neutral-200 bg-neutral-100 p-3"
         />
       ) : (
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto rounded-md border border-neutral-200 bg-white p-4">
