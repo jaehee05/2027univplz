@@ -18,7 +18,7 @@ export default async function UniversityPage({
   const [exams, universities] = await Promise.all([listExams(univId), listUniversities()]);
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-10">
+    <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
       <AdminNav
         user={user}
         title={university.name}

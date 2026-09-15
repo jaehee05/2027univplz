@@ -1,56 +1,45 @@
 import Link from "next/link";
 
-import { LogoutButton } from "@/components/auth/LogoutButton";
-
-const LINKS = [
-  { href: "/admin", label: "관리 홈" },
-  { href: "/admin/universities", label: "대학 · 기출" },
-  { href: "/admin/intake", label: "기출 올리기" },
-  { href: "/admin/students", label: "학생" },
-  { href: "/admin/assignments", label: "과제 · 첨삭" },
-  { href: "/admin/manuscript", label: "원고지" },
-];
-
+/**
+ * 관리 화면의 쪽 머리글.
+ *
+ * 화면 사이를 오가는 길과 로그인 정보는 겉틀(`AdminSidebar`)이 맡는다.
+ * 여기는 "지금 보고 있는 화면이 무엇인가"만 적는다.
+ */
 export function AdminNav({
-  user,
   title,
   description,
   back,
+  action,
 }: {
-  user: { displayName: string; email: string };
+  /** 겉틀이 이미 보여 주므로 쓰지 않는다. 부르는 쪽을 고치지 않으려고 받아만 둔다. */
+  user?: { displayName: string; email: string };
   title: string;
   description?: string;
   back?: { href: string; label: string };
+  /** 오른쪽에 붙일 단추 — 이 화면에서 가장 자주 하는 일 */
+  action?: React.ReactNode;
 }) {
   return (
     <header className="border-b border-neutral-200 pb-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <nav className="flex flex-wrap gap-3 text-sm text-neutral-500">
-          {LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="underline-offset-4 hover:underline">
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="flex items-center gap-3 text-sm text-neutral-500">
-          <span>
-            {user.displayName} 선생님 · {user.email}
-          </span>
-          <LogoutButton />
-        </div>
-      </div>
-
       {back ? (
         <Link
           href={back.href}
-          className="mt-4 inline-block text-sm text-neutral-500 underline-offset-4 hover:underline"
+          className="inline-block text-sm text-neutral-500 underline-offset-4 hover:underline"
         >
           ← {back.label}
         </Link>
       ) : null}
 
-      <h1 className="mt-3 text-2xl font-bold">{title}</h1>
-      {description ? <p className="mt-1 text-sm text-neutral-500">{description}</p> : null}
+      <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold sm:text-2xl">{title}</h1>
+          {description ? (
+            <p className="mt-1 text-sm text-neutral-500">{description}</p>
+          ) : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
     </header>
   );
 }

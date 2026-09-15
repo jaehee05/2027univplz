@@ -51,6 +51,8 @@ async function main() {
       ? ([["기출 작업대", `/admin/universities/${univ.id}/exams/${exam.id}`]] as [string, string][])
       : []),
     ["내 과제(학생 화면)", "/dashboard"],
+    ["첨삭 결과 목록(학생 화면)", "/history"],
+    ["내 정보(학생 화면)", "/me"],
     ["쓰기", `/write/${target.id}`],
     ["결과", `/results/${target.id}`],
     ["첨삭 확인", `/admin/corrections/${target.id}`],

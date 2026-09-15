@@ -37,7 +37,7 @@ export default async function CorrectionPage({
   }));
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-8">
+    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <Link
         href="/admin/assignments"
         className="text-sm text-neutral-500 underline-offset-4 hover:underline"

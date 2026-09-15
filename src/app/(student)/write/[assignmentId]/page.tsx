@@ -61,27 +61,29 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
   );
 
   return (
-    <main className="mx-auto flex h-dvh w-full max-w-[1800px] flex-col px-5 py-4">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-neutral-200 pb-3">
-        <div className="flex flex-wrap items-baseline gap-x-3">
+    <main className="mx-auto flex h-dvh w-full max-w-[1800px] flex-col px-4 py-3 sm:px-5">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-neutral-200 pb-3">
+        <div className="flex min-w-0 items-baseline gap-x-3">
           <Link
             href={assignment.selfPractice ? "/admin/assignments" : "/dashboard"}
-            className="text-sm text-neutral-500 underline-offset-4 hover:underline"
+            className="shrink-0 text-sm text-neutral-500 underline-offset-4 hover:underline"
           >
-            ← {assignment.selfPractice ? "과제 · 첨삭" : "내 과제"}
+            ←
           </Link>
-          <h1 className="text-lg font-bold">{assignment.examTitle}</h1>
-          <p className="text-sm text-neutral-500">
-            {assignment.univName} · 문항 {assignment.questions.length}개
-          </p>
+          <div className="min-w-0">
+            <h1 className="truncate font-bold">{assignment.examTitle}</h1>
+            <p className="text-xs text-neutral-500">
+              {assignment.univName} · 문항 {assignment.questions.length}개
+            </p>
+          </div>
         </div>
 
         <Link
           href={`/print/exam/${assignment.id}`}
           target="_blank"
-          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+          className="shrink-0 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium"
         >
-          문제지 · 답안지 인쇄
+          인쇄
         </Link>
       </header>
 
@@ -93,7 +95,14 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
           hasPdf,
           pageFrom: paper?.pageFrom ?? null,
           pageTo: paper?.pageTo ?? null,
-          version: [paper?.uploadedAt ?? "", paper?.pageFrom ?? 0, paper?.pageTo ?? 0].join("-"),
+          // 가림칠을 고쳐도 주소가 달라져야 한다 — 아니면 학생 브라우저가 가리기 전 파일을 계속 쓴다.
+          version: [
+            paper?.uploadedAt ?? "",
+            paper?.pageFrom ?? 0,
+            paper?.pageTo ?? 0,
+            paper?.masks.length ?? 0,
+            JSON.stringify(paper?.masks ?? []).length,
+          ].join("-"),
         }}
       />
     </main>

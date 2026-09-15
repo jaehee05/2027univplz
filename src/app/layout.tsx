@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ko" className={`${notoSansKr.variable} h-full antialiased`}>
-      <body className="min-h-full bg-white text-neutral-900">{children}</body>
+      <body className="min-h-full text-neutral-900">{children}</body>
     </html>
   );
 }

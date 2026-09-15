@@ -33,7 +33,7 @@ export default async function ExamPage({
   const exam = toExam(examSnap, univId);
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-10">
+    <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
       <AdminNav
         user={user}
         title={`${exam.year}학년도 ${exam.title}${exam.session ? ` · ${exam.session}` : ""}`}

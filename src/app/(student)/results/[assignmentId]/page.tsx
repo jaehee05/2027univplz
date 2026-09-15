@@ -48,37 +48,40 @@ export default async function ResultPage({ params }: PageProps<"/results/[assign
   }));
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-8">
+    <main className="pb-tabbar mx-auto w-full max-w-6xl px-4 pt-5 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link
-          href="/dashboard"
+          href="/history"
           className="text-sm text-neutral-500 underline-offset-4 hover:underline"
         >
-          ← 내 과제
+          ← 첨삭 결과
         </Link>
         <Link
           href={`/print/correction/${assignment.id}`}
           target="_blank"
-          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+          className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium"
         >
-          첨삭 결과지 인쇄
+          인쇄
         </Link>
       </div>
 
-      <header className="mt-3 border-b border-neutral-200 pb-4">
+      <header className="mt-3">
         <p className="text-sm text-neutral-500">{assignment.univName}</p>
-        <h1 className="mt-1 text-xl font-bold">{assignment.examTitle} 첨삭 결과</h1>
-        <p className="mt-1 text-sm text-neutral-600">
-          {sheets
-            .map(
-              (sheet) =>
-                `${sheet.number}번 ${sheet.correction ? totalScore(sheet.correction.scores) : 0}점`,
-            )
-            .join(" · ")}
+        <h1 className="mt-0.5 text-xl font-bold sm:text-2xl">{assignment.examTitle}</h1>
+        <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-sm text-neutral-600">
+          {sheets.map((sheet) => (
+            <span key={sheet.questionId}>
+              <span className="text-neutral-400">{sheet.number}번</span>{" "}
+              <b className="tabular-nums">
+                {sheet.correction ? totalScore(sheet.correction.scores) : 0}
+              </b>
+              점
+            </span>
+          ))}
         </p>
       </header>
 
-      <div className="mt-6">
+      <div className="mt-5">
         <CorrectionSheets rows={sheets} />
       </div>
     </main>
