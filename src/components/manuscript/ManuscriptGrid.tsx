@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 
+import { markLabel } from "@/components/correction/tone";
+
 import type { Cell, LayoutResult } from "@/lib/manuscript/layout";
 import {
   cumulativeThrough,
@@ -45,13 +47,21 @@ export interface Mark {
 }
 
 const MARK_CLASS: Record<Exclude<MarkTone, "info">, string> = {
-  good: "bg-emerald-100",
-  warning: "bg-amber-100",
-  error: "bg-red-100",
+  good: "bg-emerald-200/70",
+  warning: "bg-amber-200/80",
+  error: "bg-rose-200/80",
 };
 
 // 겹칠 때 더 센 쪽이 이긴다.
 const MARK_WEIGHT: Record<Exclude<MarkTone, "info">, number> = { good: 1, warning: 2, error: 3 };
+
+/** 칸 위에 뜨는 `1)` 번호의 색 — 칠한 색과 같은 계열로 잇는다. */
+const LABEL_CLASS: Record<MarkTone, string> = {
+  good: "text-emerald-700",
+  info: "text-slate-600",
+  warning: "text-amber-700",
+  error: "text-rose-700",
+};
 
 interface Slot {
   row: number;
@@ -75,13 +85,17 @@ export function ManuscriptGrid({
   cellSize = 22,
 }: ManuscriptGridProps) {
   const range = lengthRule ? lengthRange(lengthRule) : null;
-  // 번호 배지는 칸 크기를 따라간다 — 칸이 작아도 읽히고, 커도 글자를 덮지 않는다.
-  const badge = Math.max(11, Math.min(15, Math.round(cellSize * 0.62)));
   /**
-   * 배지는 칸 왼쪽 위로 조금 튀어나온다. 첫 줄·첫 칸에서는 격자 밖으로 나가
-   * 잘려 보이므로, 튀어나오는 만큼 바깥에 자리를 만들어 둔다.
+   * 번호는 원문자(①) 대신 `1)` 로 칸 **위**에 작게 앉힌다.
+   * 칸 크기를 따라가되 너무 작아지면 읽히지 않아 하한을 둔다.
    */
-  const overhang = Math.ceil(badge / 3) + 1;
+  const labelSize = Math.max(9, Math.min(13, Math.round(cellSize * 0.52)));
+  const labelHeight = labelSize + 2;
+  /**
+   * 번호는 칸 위로 통째로 올라간다. 첫 줄에서는 격자 밖으로 나가 잘려 보이므로,
+   * 올라가는 만큼 바깥에 자리를 만들어 둔다.
+   */
+  const overhang = labelHeight;
 
   const filled = useMemo(() => {
     const map = new Map<string, Cell>();
@@ -107,7 +121,7 @@ export function ManuscriptGrid({
 
   /** 코멘트 번호를 붙일 칸 — 그 코멘트가 시작되는 칸이다. */
   const markers = useMemo(() => {
-    const map = new Map<string, number[]>();
+    const map = new Map<string, { index: number; severity: MarkTone }[]>();
     for (const issue of issues) {
       if (issue.index == null) continue;
       // 시작 위치를 담고 있는 칸을 찾는다. 없으면(공백에서 시작) 그 뒤 첫 칸.
@@ -116,7 +130,10 @@ export function ManuscriptGrid({
         layout.cells.find((c) => c.start >= issue.start);
       if (!cell) continue;
       const key = `${cell.row}:${cell.col}`;
-      map.set(key, [...(map.get(key) ?? []), issue.index]);
+      map.set(key, [
+        ...(map.get(key) ?? []),
+        { index: issue.index, severity: issue.severity },
+      ]);
     }
     return map;
   }, [issues, layout.cells]);
@@ -175,7 +192,6 @@ export function ManuscriptGrid({
           ["--cell" as string]: `${cellSize}px`,
           // 왼쪽 위로 튀어나오는 번호 배지가 잘리지 않게 자리를 둔다.
           paddingTop: `${overhang}px`,
-          paddingLeft: `${overhang}px`,
         }}
       >
         {/* 바깥 테두리는 여기 한 번만 두르고, 안쪽 격자선은 모두 같은 굵기·색으로 그린다 */}
@@ -213,7 +229,7 @@ export function ManuscriptGrid({
                       event.preventDefault();
                       const numbers = markers.get(key);
                       if (numbers?.length && onMarkSelect) {
-                        onMarkSelect(numbers[0]);
+                        onMarkSelect(numbers[0].index);
                         return;
                       }
                       onCellSelect?.(slot.cell ? slot.cell.start : (layout.cells.at(-1)?.end ?? 0));
@@ -260,21 +276,24 @@ export function ManuscriptGrid({
                       </>
                     ) : null}
 
-                    {/* 코멘트 번호 — 목록의 같은 번호와 이어진다 */}
-                    {markers.get(key)?.map((number, order) => (
+                    {/* 코멘트 번호 — 칸 위에 `1)` 로 작게. 목록의 같은 번호와 이어진다 */}
+                    {markers.get(key)?.map((mark, order) => (
                       <span
-                        key={number}
-                        className="pointer-events-none absolute flex items-center justify-center rounded-full bg-neutral-900 font-bold text-white"
+                        key={mark.index}
+                        className={[
+                          "pointer-events-none absolute rounded-[2px] bg-white px-[1px] font-bold tabular-nums",
+                          LABEL_CLASS[mark.severity],
+                        ].join(" ")}
                         style={{
-                          top: `${-badge / 3}px`,
-                          left: `${-badge / 3 + order * (badge * 0.7)}px`,
-                          width: `${badge}px`,
-                          height: `${badge}px`,
-                          fontSize: `${Math.round(badge * 0.68)}px`,
-                          lineHeight: `${badge}px`,
+                          // 칸 위로 통째로 올린다 — 칸 안 글자를 가리지 않는다.
+                          top: `${-labelHeight}px`,
+                          left: `${order * (labelSize * 1.5)}px`,
+                          height: `${labelHeight}px`,
+                          fontSize: `${labelSize}px`,
+                          lineHeight: `${labelHeight}px`,
                         }}
                       >
-                        {number}
+                        {markLabel(mark.index)}
                       </span>
                     ))}
 

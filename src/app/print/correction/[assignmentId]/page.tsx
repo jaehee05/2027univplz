@@ -1,3 +1,4 @@
+import { markLabel, numbered } from "@/components/correction/tone";
 import { PrintFrame } from "@/components/print/PrintFrame";
 import { PrintSheet } from "@/components/print/PrintSheet";
 import { loadForPrint, type PrintRow } from "@/lib/work/print";
@@ -31,9 +32,7 @@ function CorrectionSet({
   const text = answer?.text ?? "";
 
   // 답안 순서대로 번호를 매긴다 — 원고지에 붙는 번호와 같다.
-  const comments = [...correction.inlineComments]
-    .sort((a, b) => a.start - b.start)
-    .map((comment, index) => ({ ...comment, index: index + 1 }));
+  const comments = numbered(correction.inlineComments);
 
   return (
     <>
@@ -124,7 +123,7 @@ function CorrectionSet({
         <ol className="print-columns mt-2 text-xs">
           {comments.map((comment) => (
             <li key={comment.index} className="mb-2 flex gap-1.5 border-b border-neutral-200 pb-1.5">
-              <span className="w-5 shrink-0 text-right font-bold">{comment.index}.</span>
+              <span className="w-6 shrink-0 text-right font-bold tabular-nums">{markLabel(comment.index)}</span>
               <span>
                 <span className="font-medium">
                   {SEVERITY_MARK[comment.severity]} {comment.category} ·{" "}
