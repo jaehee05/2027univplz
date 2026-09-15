@@ -1,4 +1,5 @@
 import type { InlineComment } from "@/lib/types/work";
+import { snapRange } from "@/lib/work/snap";
 
 export type Severity = InlineComment["severity"];
 
@@ -51,9 +52,20 @@ export const WEIGHT: Record<Severity, number> = { info: 1, good: 2, warning: 3, 
 
 export const ORDER: Severity[] = ["error", "warning", "good", "info"];
 
-/** 답안 순서대로 1번부터 번호를 매긴다. 화면과 인쇄가 같은 번호를 쓴다. */
-export function numbered<T extends { start: number }>(comments: T[]): (T & { index: number })[] {
+/**
+ * 답안 순서대로 1번부터 번호를 매긴다. 화면과 인쇄가 같은 번호를 쓴다.
+ *
+ * 매기기 전에 구간을 말이 되는 자리로 옮겨 붙인다(`snapRange`).
+ * 저장할 때도 같은 일을 하지만, 그 장치가 생기기 전에 저장된 첨삭이 남아 있다 —
+ * `표준어의` 한복판이나 `(다)` 의 여는 괄호 뒤에서 끊긴 것들이다.
+ * 여기서 한 번 더 붙이면 옛 첨삭도 제대로 보인다. 이미 붙은 것은 그대로 지나간다.
+ */
+export function numbered<T extends { start: number; end: number }>(
+  comments: T[],
+  answerText: string,
+): (T & { index: number })[] {
   return [...comments]
+    .map((comment) => ({ ...comment, ...snapRange(answerText, comment.start, comment.end) }))
     .sort((a, b) => a.start - b.start)
     .map((comment, index) => ({ ...comment, index: index + 1 }));
 }

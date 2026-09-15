@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 
+import { numbered } from "@/components/correction/tone";
 import { ManuscriptGrid } from "@/components/manuscript/ManuscriptGrid";
 import { layoutManuscript } from "@/lib/manuscript/layout";
 import { DEFAULT_SPEC, planRows, type LengthRule } from "@/lib/manuscript/spec";
@@ -30,13 +31,7 @@ export function PrintSheet({
   orientation?: "portrait" | "landscape";
 }) {
   // 화면과 같은 번호를 종이에도 붙인다 — 답안 순서대로 1번부터.
-  const marks = useMemo(
-    () =>
-      [...comments]
-        .sort((a, b) => a.start - b.start)
-        .map((comment, index) => ({ ...comment, index: index + 1 })),
-    [comments],
-  );
+  const marks = useMemo(() => numbered(comments, text), [comments, text]);
 
   const layout = useMemo(() => layoutManuscript(text, DEFAULT_SPEC), [text]);
   const rows = useMemo(() => {

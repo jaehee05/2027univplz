@@ -39,7 +39,10 @@ export function CorrectionView({
   const cellSize = useFittedCellSize(frameRef, DEFAULT_SPEC.cols);
 
   // 답안 순서대로 1번부터. 원고지·줄글·목록·인쇄가 같은 번호를 쓴다.
-  const comments = useMemo(() => numbered(correction.inlineComments), [correction.inlineComments]);
+  const comments = useMemo(
+    () => numbered(correction.inlineComments, answerText),
+    [correction.inlineComments, answerText],
+  );
 
   const counts = useMemo(() => {
     const map = new Map<Severity, number>();

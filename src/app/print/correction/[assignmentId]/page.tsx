@@ -36,7 +36,7 @@ function CorrectionSet({
   const text = answer?.text ?? "";
 
   // 답안 순서대로 번호를 매긴다 — 원고지에 붙는 번호와 같다.
-  const comments = numbered(correction.inlineComments);
+  const comments = numbered(correction.inlineComments, text);
 
   return (
     <>
