@@ -34,10 +34,11 @@ const input = {
       prompt: "제시문 (가)와 (나)를 활용하여 집중과 분산의 관계를 논하시오.",
       lengthNote: "800자 내외",
       charTarget: 800,
+      points: 40,
     },
     // 원문 문구에 이미 괄호가 씌워진 경우 — 그대로 두면 `((800±100자))` 가 된다.
-    { number: "2", prompt: "제시문 (나)의 관점에서 (가)를 비판하시오.", lengthNote: "(800±100자)", charTarget: 600 },
-    { number: "3", prompt: "위 논의를 종합하시오.", lengthNote: null, charTarget: 600 },
+    { number: "2", prompt: "제시문 (나)의 관점에서 (가)를 비판하시오.", lengthNote: "(800±100자)", charTarget: 600, points: 35 },
+    { number: "3", prompt: "위 논의를 종합하시오.", lengthNote: null, charTarget: 600, points: 25 },
   ],
 };
 
@@ -139,26 +140,30 @@ check("제시문 (가) 머리", text.includes("제시문 (가)"));
 check("괄호 없는 기호도 (나) 로", text.includes("제시문 (나)"));
 check("제시문 (가) 본문", text.includes("집중과 분산은 어느 하나가"));
 check("빈 줄로 나뉜 뒷 문단", text.includes("만인의 만인에 대한 투쟁"));
-check("문제 1 머리 · 분량", text.includes("문제 1 (800자 내외)"));
-check("문제 2 — 괄호 겹치지 않음", text.includes("문제 2 (800±100자)") && !text.includes("((")); 
-check("문제 3 — 분량 조건 없으면 목표로", text.includes("문제 3 (600자 내외)"));
+// 실제 문제지 꼴 — 번호와 논제가 한 문단, 끝 괄호에 분량과 배점.
+check(
+  "문제 1 — 번호·논제·조건이 한 줄",
+  text.includes("[문제 1] 제시문 (가)와 (나)를 활용하여 집중과 분산의 관계를 논하시오. (800자 내외, 40점)"),
+);
+check(
+  "문제 2 — 괄호 겹치지 않음",
+  text.includes("[문제 2]") && text.includes("(800±100자, 35점)") && !text.includes("(("),
+);
+check("문제 3 — 분량 조건 없으면 목표로", text.includes("(600자 안팎, 25점)"));
 check("논제 본문", text.includes("집중과 분산의 관계를 논하시오"));
 check("검수 안내", text.includes("PDF 로 저장해 올려 주세요"));
 
-// ── 표지 서식 ─────────────────────────────────────────────
-console.log("\n표지");
+// ── 문제지 머리 ───────────────────────────────────────────
+console.log("\n문제지 머리");
 check("응시자 칸 — 모집단위", text.includes("모 집 단 위"));
 check("응시자 칸 — 수험번호", text.includes("수 험 번 호"));
 check("응시자 칸 — 성명", text.includes("성 명"));
-check("유의사항 머리", text.includes("<유의사항>"));
-check("유의사항 1번", text.includes("1. 답안에 제목을 쓰지 마십시오."));
-check("유의사항 5번", text.includes("5. 수험생의 신원을 드러내는"));
+check("안내 줄 · 총점", text.includes("※ 아래 제시문을 읽고 문제에 답하시오. (총 100점)"));
 
 const sectionXmlText = decoder.decode(entries["Contents/section0.xml"]);
 check("표가 들어갔는가", /<hp:tbl\b/.test(sectionXmlText),
   `${(sectionXmlText.match(/<hp:tc\b/g) ?? []).length}칸`);
 check("표는 실선 테두리(borderFill 2)", /<hp:tbl[^>]*borderFillIDRef="2"/.test(sectionXmlText));
-check("표지 다음에 쪽을 나눴는가", /pageBreak="1"/.test(sectionXmlText));
 // 한글이 계산할 자리다. 우리가 지어 넣으면 한 문단이 한 줄에 겹쳐 찍힌다.
 check("linesegarray 를 넣지 않았는가", !sectionXmlText.includes("linesegarray"));
 
@@ -167,13 +172,11 @@ check("꺾쇠 · 따옴표 · 앰퍼샌드", text.includes('<집중>과 "분산"
 
 console.log(`\n  문단 ${read.paragraphs}개 · 쪽 ${read.pageTexts.length}개`);
 
-// 대학마다 문구가 다르므로 바꿔 넣을 수 있어야 한다.
+// 유의사항은 기본으로 넣지 않되, 필요하면 덧붙일 수 있어야 한다.
+check("기본은 유의사항 없음", !text.includes("<유의사항>") && !text.includes("1. 답안에 제목을"));
 const custom = extractHwpx(buildHandoutHwpx({ ...input, notes: ["시험 시간은 120분입니다."] }))
   .pageTexts.join("\n");
-check(
-  "유의사항 바꿔 넣기",
-  custom.includes("1. 시험 시간은 120분입니다.") && !custom.includes("답안에 제목을"),
-);
+check("덧붙이면 나온다", custom.includes("1. 시험 시간은 120분입니다."));
 
 if (failed > 0) {
   console.log(`\n✗ ${failed}개 어긋남`);

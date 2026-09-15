@@ -49,6 +49,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       prompt: question.prompt,
       lengthNote: question.lengthNote,
       charTarget: question.charTarget,
+      points: question.points,
     })),
   });
 

@@ -14,10 +14,11 @@ import { zipSync } from "fflate";
  */
 
 /** 문단에 입히는 모양. header.xml 에 정의해 둔 것과 번호가 맞아야 한다. */
-type Style = "title" | "heading" | "body" | "note";
+type Style = "title" | "heading" | "body" | "question" | "note";
 
-const CHAR_PR: Record<Style, number> = { title: 1, heading: 2, body: 0, note: 3 };
-const PARA_PR: Record<Style, number> = { title: 1, heading: 2, body: 0, note: 0 };
+const CHAR_PR: Record<Style, number> = { title: 1, heading: 2, body: 0, question: 0, note: 3 };
+// 논제는 번호를 내어쓰기로 빼서 `[문제 1]` 이 왼쪽으로 튀어나오게 한다.
+const PARA_PR: Record<Style, number> = { title: 1, heading: 2, body: 0, question: 3, note: 2 };
 
 function escapeXml(value: string): string {
   return value
@@ -158,6 +159,8 @@ function headerXml(): string {
     { id: 0, align: "JUSTIFY", indent: 1000, prev: 0, next: 300 },
     { id: 1, align: "CENTER", indent: 0, prev: 0, next: 900 },
     { id: 2, align: "LEFT", indent: 0, prev: 900, next: 300 },
+    // 논제 — 번호가 왼쪽으로 튀어나오게 내어쓴다(음수 들여쓰기).
+    { id: 3, align: "JUSTIFY", indent: -1600, prev: 800, next: 300 },
   ]
     .map(
       (shape) =>
@@ -191,7 +194,7 @@ function headerXml(): string {
     `<hh:charProperties itemCnt="4">${charShapes}</hh:charProperties>` +
     `<hh:tabProperties itemCnt="1"><hh:tabPr id="0" autoTabLeft="0" autoTabRight="0"/></hh:tabProperties>` +
     `<hh:numberings itemCnt="0"/>` +
-    `<hh:paraProperties itemCnt="3">${paraShapes}</hh:paraProperties>` +
+    `<hh:paraProperties itemCnt="4">${paraShapes}</hh:paraProperties>` +
     `<hh:styles itemCnt="1">` +
     `<hh:style id="0" type="PARA" name="바탕글" engName="Normal" paraPrIDRef="0" charPrIDRef="0" nextStyleIDRef="0" langID="1042" lockForm="0"/>` +
     `</hh:styles>` +
@@ -307,6 +310,8 @@ export interface HandoutQuestion {
   /** 원문에 적힌 분량 조건 문구. 없으면 charTarget 으로 만든다 */
   lengthNote: string | null;
   charTarget: number | null;
+  /** 배점. 문제 끝 괄호에 함께 적는다 */
+  points?: number | null;
 }
 
 export interface HandoutInput {
@@ -316,30 +321,21 @@ export interface HandoutInput {
   passages: { label: string; text: string }[];
   questions: HandoutQuestion[];
   /**
-   * 표지에 싣는 유의사항. 대학마다 문구가 달라 바꿔 넣을 수 있게 둔다.
-   * 넘기지 않으면 아래 기본 문구를 쓴다 — 선생님이 한글에서 고치는 것을 전제로 한 초안이다.
+   * 제목 아래 `※` 줄 다음에 덧붙일 유의사항.
+   * 실제 대학 문제지에는 없는 경우가 많아 기본은 비워 둔다.
    */
   notes?: string[];
 }
 
-/**
- * 논술 문제지에 흔히 적히는 유의사항.
- * 대학마다 문구가 다르니 **그대로 내보내지 말고 검수하라**는 뜻으로 초안만 둔다.
- */
-export const DEFAULT_NOTES = [
-  "답안에 제목을 쓰지 마십시오.",
-  "답안은 하나의 완결된 글로 작성하십시오.",
-  "문제에서 요구하는 글자 수를 지키십시오.",
-  "제시문의 문장을 그대로 옮겨 쓰지 마십시오. 다만 필요한 단어나 어구를 인용할 수는 있습니다.",
-  "수험생의 신원을 드러내는 표현을 쓰지 마십시오.",
-];
-
-function lengthLine(question: HandoutQuestion): string | null {
-  // 원문 문구에 이미 괄호가 씌워져 있으면 벗긴다 — 안 그러면 `((800±100자))` 가 된다.
-  const raw = question.lengthNote?.trim();
-  if (raw) return raw.replace(/^\((.*)\)$/, "$1");
-  if (question.charTarget) return `${question.charTarget}자 내외`;
-  return null;
+/** 분량 조건 · 배점을 문제 끝 괄호에 함께 적는다. "(600자 안팎, 25점)" */
+function condition(question: HandoutQuestion): string {
+  const parts: string[] = [];
+  // 원문 문구에 이미 괄호가 씌워져 있으면 벗긴다 — 안 그러면 괄호가 겹친다.
+  const note = question.lengthNote?.trim().replace(/^[(（](.*)[)）]$/, "$1");
+  if (note) parts.push(note);
+  else if (question.charTarget) parts.push(`${question.charTarget}자 안팎`);
+  if (question.points) parts.push(`${question.points}점`);
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
 /** 제시문 기호를 `(가)` 꼴로 맞춘다. 논제가 그 꼴로 부르므로 문제지도 같아야 한다. */
@@ -350,10 +346,10 @@ function passageLabel(label: string): string {
 
 /** 표지 · 본문을 이루는 한 덩어리 */
 type Block =
-  | { kind: "text"; text: string; style: Style; pageBreak?: boolean }
+  | { kind: "text"; text: string; style: Style }
   | { kind: "table"; rows: string[][]; widths: number[]; rowHeight: number };
 
-function render(block: Block, first: boolean): string {
+function render(block: Block): string {
   if (block.kind === "table") {
     return (
       `<hp:p paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
@@ -361,23 +357,26 @@ function render(block: Block, first: boolean): string {
       `</hp:p>`
     );
   }
-  return paragraph(block.text, block.style, { pageBreak: block.pageBreak && !first });
+  return paragraph(block.text, block.style);
 }
 
 /**
  * 문제지 초안을 HWPX 로 만든다.
  *
- * 표지(제목 · 응시자 칸 · 유의사항) 한 쪽, 그 뒤로 제시문과 논제.
- * 답안지는 넣지 않는다 — 앱이 원고지 규격대로 따로 인쇄한다.
+ * 짜임새는 실제 대학 문제지(연세대 논술시험 문제)를 그대로 본떴다 —
+ * 제목 한 줄, 응시자 칸, `※` 안내, 제시문, 그리고 `[문제 N] … (분량, 배점)`.
+ * 표지를 따로 두거나 유의사항을 늘어놓지 않는다. 실제 문제지가 그렇지 않다.
  *
- * 대학 로고는 넣지 못한다. 그림 파일을 앱이 가지고 있지 않아서다.
- * 필요하면 선생님이 한글에서 표지 맨 위에 넣으면 된다.
+ * 답안지는 넣지 않는다 — 앱이 원고지 규격대로 따로 인쇄한다.
+ * 대학 로고와 쪽 번호도 넣지 못한다. 그림 파일이 없고, 쪽 번호는 한글에서
+ * `쪽 번호 넣기` 로 한 번에 붙는다.
  */
 export function buildHandoutHwpx(input: HandoutInput): Uint8Array {
+  const total = input.questions.reduce((sum, q) => sum + (q.points ?? 0), 0);
+
   const blocks: Block[] = [
-    { kind: "text", text: `${input.univName}`, style: "note" },
-    { kind: "text", text: input.examTitle, style: "title" },
-    // 응시자가 손으로 적는 칸. 라벨 줄 + 빈 줄.
+    { kind: "text", text: `${input.univName} ${input.examTitle}`, style: "title" },
+    // 응시자가 손으로 적는 칸.
     {
       kind: "table",
       rows: [
@@ -387,25 +386,25 @@ export function buildHandoutHwpx(input: HandoutInput): Uint8Array {
       widths: [17000, 15000, 13000],
       rowHeight: 1400,
     },
-    { kind: "text", text: "<유의사항>", style: "heading" },
-    ...(input.notes ?? DEFAULT_NOTES).map((note, index) => ({
+    {
+      kind: "text",
+      text: `※ 아래 제시문을 읽고 문제에 답하시오.${total > 0 ? ` (총 ${total}점)` : ""}`,
+      style: "note",
+    },
+    ...(input.notes ?? []).map((note, index) => ({
       kind: "text" as const,
       text: `${index + 1}. ${note}`,
       style: "body" as const,
     })),
   ];
 
-  // 표지 다음 쪽부터 제시문이다.
-  let startsPage = true;
   for (const passage of input.passages) {
     blocks.push({
       kind: "text",
       text: `제시문 ${passageLabel(passage.label)}`,
       style: "heading",
-      pageBreak: startsPage,
     });
-    startsPage = false;
-    // 빈 줄로 나뉜 덩어리를 문단 하나씩으로 옮긴다.
+    // 빈 줄로 나뉜 덩어리를 문단 하나씩으로 옮긴다. 문단 첫 칸은 문단 모양이 들여 준다.
     for (const chunk of passage.text.split(/\n\s*\n/)) {
       const text = chunk.trim();
       if (text) blocks.push({ kind: "text", text, style: "body" });
@@ -413,25 +412,21 @@ export function buildHandoutHwpx(input: HandoutInput): Uint8Array {
   }
 
   for (const question of input.questions) {
-    const note = lengthLine(question);
+    // 번호와 논제가 한 문단으로 이어진다 — 실제 문제지가 그 꼴이다.
     blocks.push({
       kind: "text",
-      text: `문제 ${question.number}${note ? ` (${note})` : ""}`,
-      style: "heading",
-      // 제시문이 하나도 없으면 논제가 표지 다음 쪽을 연다.
-      pageBreak: startsPage,
+      text: `[문제 ${question.number}] ${question.prompt.trim()}${condition(question)}`,
+      style: "question",
     });
-    startsPage = false;
-    blocks.push({ kind: "text", text: question.prompt.trim(), style: "body" });
   }
 
   blocks.push({
     kind: "text",
-    text: "※ OCR 로 뽑은 글을 옮긴 초안입니다. 오탈자 · 제시문 범위 · 유의사항 문구를 확인한 뒤 PDF 로 저장해 올려 주세요.",
+    text: "※ OCR 로 뽑은 글을 옮긴 초안입니다. 오탈자와 제시문 범위를 확인한 뒤 PDF 로 저장해 올려 주세요.",
     style: "note",
   });
 
-  const section = sectionXml(blocks.map((block, index) => render(block, index === 0)));
+  const section = sectionXml(blocks.map(render));
   const encoder = new TextEncoder();
 
   return zipSync(
