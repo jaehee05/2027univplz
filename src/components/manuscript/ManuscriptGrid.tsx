@@ -46,10 +46,14 @@ export interface Mark {
   index?: number;
 }
 
-const MARK_CLASS: Record<Exclude<MarkTone, "info">, string> = {
-  good: "bg-emerald-200/70",
-  warning: "bg-amber-200/80",
-  error: "bg-rose-200/80",
+/**
+ * 구간 괄호의 색. 원고지는 칸이 빽빽해서 바탕을 칠하면 글자가 묻히고
+ * 인쇄하면 지저분하다. 대신 양 끝에 형광펜 색 괄호를 굵게 세운다.
+ */
+const BRACKET_CLASS: Record<Exclude<MarkTone, "info">, string> = {
+  good: "border-emerald-500",
+  warning: "border-amber-500",
+  error: "border-rose-500",
 };
 
 // 겹칠 때 더 센 쪽이 이긴다.
@@ -108,22 +112,6 @@ export function ManuscriptGrid({
     return map;
   }, [layout.cells]);
 
-  const flagged = useMemo(() => {
-    const marks = new Map<string, Exclude<MarkTone, "info">>();
-    for (const issue of issues) {
-      if (issue.severity === "info" || issue.end <= issue.start) continue;
-      const tone = issue.severity;
-      for (const cell of layout.cells) {
-        if (cell.start < issue.end && cell.end > issue.start) {
-          const key = `${cell.row}:${cell.col}`;
-          const current = marks.get(key);
-          if (!current || MARK_WEIGHT[tone] > MARK_WEIGHT[current]) marks.set(key, tone);
-        }
-      }
-    }
-    return marks;
-  }, [issues, layout.cells]);
-
   /**
    * 구간의 양 끝 칸. 종이에서는 칸을 칠하는 대신 여기에 괄호를 세운다 —
    * 형광펜 색은 화면에서는 잘 읽히지만 인쇄하면 지저분하다.
@@ -132,8 +120,8 @@ export function ManuscriptGrid({
    * 가운데 줄에는 아무 표시도 남지 않는다.
    */
   const brackets = useMemo(() => {
-    const open = new Set<string>();
-    const close = new Set<string>();
+    const open = new Map<string, Exclude<MarkTone, "info">>();
+    const close = new Map<string, Exclude<MarkTone, "info">>();
 
     for (const issue of issues) {
       if (issue.severity === "info" || issue.end <= issue.start) continue;
@@ -144,11 +132,18 @@ export function ManuscriptGrid({
 
       const rows = new Map<number, Cell[]>();
       for (const cell of inside) rows.set(cell.row, [...(rows.get(cell.row) ?? []), cell]);
+      const tone = issue.severity;
       for (const line of rows.values()) {
         const sorted = [...line].sort((a, b) => a.col - b.col);
-        open.add(`${sorted[0].row}:${sorted[0].col}`);
+        const first = sorted[0];
         const last = sorted[sorted.length - 1];
-        close.add(`${last.row}:${last.col}`);
+        // 겹치면 더 센 쪽 색을 쓴다.
+        const put = (map: Map<string, Exclude<MarkTone, "info">>, key: string) => {
+          const current = map.get(key);
+          if (!current || MARK_WEIGHT[tone] > MARK_WEIGHT[current]) map.set(key, tone);
+        };
+        put(open, `${first.row}:${first.col}`);
+        put(close, `${last.row}:${last.col}`);
       }
     }
     return { open, close };
@@ -258,7 +253,8 @@ export function ManuscriptGrid({
                 const overLimit = range != null && slot.index > range.max;
                 const isTarget =
                   targetPos != null && targetPos.row === slot.row && targetPos.col === slot.col;
-                const mark = flagged.get(key);
+                const openTone = brackets.open.get(key);
+                const closeTone = brackets.close.get(key);
                 const isCaret = caretKey === key;
                 const isLastCol = col === line.length - 1;
 
@@ -283,12 +279,9 @@ export function ManuscriptGrid({
                       "relative flex shrink-0 items-center justify-center border-sky-200 leading-none",
                       isLastCol ? "" : "border-r",
                       gutter || row === lastRow ? "" : "border-b",
-                      // 종이에서는 칠하지 않는다 — 대신 아래에서 괄호를 세운다.
-                      mark
-                        ? `${MARK_CLASS[mark]} print:bg-transparent`
-                        : overLimit
-                          ? "bg-red-50 print:bg-transparent"
-                          : "bg-transparent",
+                      // 구간은 칠하지 않는다 — 아래에서 괄호로 묶는다.
+                      // 분량 초과만 옅게 깔아 둔다. 그건 구간이 아니라 자리 표시다.
+                      overLimit ? "bg-red-50 print:bg-transparent" : "bg-transparent",
                       active.has(key) ? "ring-2 ring-inset ring-neutral-900" : "",
                       isCaret ? "ring-2 ring-inset ring-sky-500" : "",
                       onCellSelect ? "cursor-text" : markers.has(key) ? "cursor-pointer" : "cursor-default",
@@ -346,12 +339,16 @@ export function ManuscriptGrid({
                       </span>
                     ))}
 
-                    {/* 종이에서만 보이는 구간 괄호 — 「 …… 」 */}
-                    {brackets.open.has(key) ? (
-                      <span className="pointer-events-none absolute inset-y-[2px] left-[1px] hidden w-[3px] border-y border-l border-neutral-900 print:block" />
+                    {/* 구간 괄호 — 「 …… 」. 화면과 종이가 같은 모양을 쓴다. */}
+                    {openTone ? (
+                      <span
+                        className={`pointer-events-none absolute inset-y-0 left-0 w-[5px] border-y-[3px] border-l-[3px] ${BRACKET_CLASS[openTone]}`}
+                      />
                     ) : null}
-                    {brackets.close.has(key) ? (
-                      <span className="pointer-events-none absolute inset-y-[2px] right-[1px] hidden w-[3px] border-y border-r border-neutral-900 print:block" />
+                    {closeTone ? (
+                      <span
+                        className={`pointer-events-none absolute inset-y-0 right-0 w-[5px] border-y-[3px] border-r-[3px] ${BRACKET_CLASS[closeTone]}`}
+                      />
                     ) : null}
 
                     {isTarget ? (
