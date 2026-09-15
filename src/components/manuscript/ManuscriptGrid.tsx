@@ -124,6 +124,36 @@ export function ManuscriptGrid({
     return marks;
   }, [issues, layout.cells]);
 
+  /**
+   * 구간의 양 끝 칸. 종이에서는 칸을 칠하는 대신 여기에 괄호를 세운다 —
+   * 형광펜 색은 화면에서는 잘 읽히지만 인쇄하면 지저분하다.
+   *
+   * 한 구간이 여러 줄에 걸치면 **줄마다** 양 끝을 잡는다. 그러지 않으면
+   * 가운데 줄에는 아무 표시도 남지 않는다.
+   */
+  const brackets = useMemo(() => {
+    const open = new Set<string>();
+    const close = new Set<string>();
+
+    for (const issue of issues) {
+      if (issue.severity === "info" || issue.end <= issue.start) continue;
+      const inside = layout.cells.filter(
+        (cell) => cell.start < issue.end && cell.end > issue.start,
+      );
+      if (inside.length === 0) continue;
+
+      const rows = new Map<number, Cell[]>();
+      for (const cell of inside) rows.set(cell.row, [...(rows.get(cell.row) ?? []), cell]);
+      for (const line of rows.values()) {
+        const sorted = [...line].sort((a, b) => a.col - b.col);
+        open.add(`${sorted[0].row}:${sorted[0].col}`);
+        const last = sorted[sorted.length - 1];
+        close.add(`${last.row}:${last.col}`);
+      }
+    }
+    return { open, close };
+  }, [issues, layout.cells]);
+
   /** 코멘트 번호를 붙일 칸 — 그 코멘트가 시작되는 칸이다. */
   const markers = useMemo(() => {
     const map = new Map<string, { index: number; severity: MarkTone }[]>();
@@ -253,7 +283,12 @@ export function ManuscriptGrid({
                       "relative flex shrink-0 items-center justify-center border-sky-200 leading-none",
                       isLastCol ? "" : "border-r",
                       gutter || row === lastRow ? "" : "border-b",
-                      mark ? MARK_CLASS[mark] : overLimit ? "bg-red-50" : "bg-transparent",
+                      // 종이에서는 칠하지 않는다 — 대신 아래에서 괄호를 세운다.
+                      mark
+                        ? `${MARK_CLASS[mark]} print:bg-transparent`
+                        : overLimit
+                          ? "bg-red-50 print:bg-transparent"
+                          : "bg-transparent",
                       active.has(key) ? "ring-2 ring-inset ring-neutral-900" : "",
                       isCaret ? "ring-2 ring-inset ring-sky-500" : "",
                       onCellSelect ? "cursor-text" : markers.has(key) ? "cursor-pointer" : "cursor-default",
@@ -310,6 +345,14 @@ export function ManuscriptGrid({
                         {markLabel(mark.index)}
                       </span>
                     ))}
+
+                    {/* 종이에서만 보이는 구간 괄호 — 「 …… 」 */}
+                    {brackets.open.has(key) ? (
+                      <span className="pointer-events-none absolute inset-y-[2px] left-[1px] hidden w-[3px] border-y border-l border-neutral-900 print:block" />
+                    ) : null}
+                    {brackets.close.has(key) ? (
+                      <span className="pointer-events-none absolute inset-y-[2px] right-[1px] hidden w-[3px] border-y border-r border-neutral-900 print:block" />
+                    ) : null}
 
                     {isTarget ? (
                       <span className="pointer-events-none absolute top-0 -right-px h-full w-[2px] bg-sky-600" />
