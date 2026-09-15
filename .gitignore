@@ -40,6 +40,3 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# scripts/copy-pdf-worker.mjs 가 만든다
-/public/pdf.worker.min.mjs

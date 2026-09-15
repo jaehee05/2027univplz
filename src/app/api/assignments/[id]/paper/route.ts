@@ -11,9 +11,12 @@ type Ctx = RouteContext<"/api/assignments/[id]/paper">;
  * Storage 규칙은 teacher 만 읽게 막아 두었으므로(학생에게 전 대학 기출을 열 수는 없다),
  * 여기서 "이 과제의 학생인가"만 확인하고 서버가 대신 읽어 넘긴다.
  *
- * 한 파일에 문제지와 해설이 같이 든 경우가 많아, 파일을 통째로 내보내면
- * 학생이 뒤로 넘겨 답을 볼 수 있다. 그래서 배정된 쪽만 잘라서 내보내고,
- * 한 쪽 안에 섞여 있으면 선생님이 칠해 둔 자리를 덮어서 내보낸다.
+ * 학생용 문제지(`studentPdf`)가 올라와 있으면 그것을 그대로 내보낸다.
+ * 원본 기출은 문제와 해설이 한 파일에, 때로는 한 쪽 안에 같이 실려 있어
+ * 잘라도 가려도 답이 새어 나갈 구석이 남는다. 선생님이 따로 만들어 올린 것을 쓰면
+ * 새어 나갈 것이 애초에 없다.
+ *
+ * 없으면 원본을 배정된 쪽만 잘라서 내보낸다.
  */
 export async function GET(request: Request, ctx: Ctx) {
   const auth = await apiUser();
@@ -44,7 +47,11 @@ export async function GET(request: Request, ctx: Ctx) {
   }
 
   const exam = toExam(examSnap, assignment.univId);
-  const file = kind === "question" ? exam.questionPdf : exam.solutionPdf;
+  // 학생이 문제지를 달라고 하면 학생용부터 찾는다. 해설은 선생님만 보고 늘 원본이다.
+  const file =
+    kind === "solution"
+      ? exam.solutionPdf
+      : (exam.studentPdf ?? exam.questionPdf);
   if (!file) {
     return Response.json({ error: "올려 둔 파일이 없습니다." }, { status: 404 });
   }
@@ -54,15 +61,9 @@ export async function GET(request: Request, ctx: Ctx) {
   }
 
   try {
-    // 선생님이 봐도 배정된 쪽만, 가림칠도 그대로 얹어서 내보낸다 —
-    // 학생이 보는 것과 같아야 제대로 가려졌는지 확인이 된다.
+    // 선생님이 봐도 학생이 받는 것과 똑같이 내보낸다 — 그래야 확인이 된다.
     // 원본 전체는 관리 화면에서 본다.
-    const bytes = await cropPdfPages(
-      file.storagePath,
-      file.pageFrom,
-      file.pageTo,
-      file.masks,
-    );
+    const bytes = await cropPdfPages(file.storagePath, file.pageFrom, file.pageTo);
 
     return new Response(new Uint8Array(bytes), {
       headers: {

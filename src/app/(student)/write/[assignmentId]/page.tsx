@@ -54,7 +54,8 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
     examRef(assignment.univId, assignment.examId).get(),
   ]);
   const exam = examSnap.exists ? toExam(examSnap, assignment.univId) : null;
-  const paper = exam?.questionPdf ?? null;
+  // 선생님이 학생용 문제지를 따로 올렸으면 그것이 나간다.
+  const paper = exam?.studentPdf ?? exam?.questionPdf ?? null;
   const hasPdf = Boolean(paper && paper.fileName.toLowerCase().endsWith(".pdf"));
 
   // 여러 문항이 함께 쓰는 제시문은 한 번만 싣는다.
@@ -99,14 +100,8 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
           hasPdf,
           pageFrom: paper?.pageFrom ?? null,
           pageTo: paper?.pageTo ?? null,
-          // 가림칠을 고쳐도 주소가 달라져야 한다 — 아니면 학생 브라우저가 가리기 전 파일을 계속 쓴다.
-          version: [
-            paper?.uploadedAt ?? "",
-            paper?.pageFrom ?? 0,
-            paper?.pageTo ?? 0,
-            paper?.masks.length ?? 0,
-            JSON.stringify(paper?.masks ?? []).length,
-          ].join("-"),
+          // 파일이나 쪽 범위가 바뀌면 주소가 달라져 학생 브라우저가 새로 받는다.
+          version: [paper?.uploadedAt ?? "", paper?.pageFrom ?? 0, paper?.pageTo ?? 0].join("-"),
         }}
       />
     </main>

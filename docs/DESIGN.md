@@ -33,18 +33,17 @@ Claude API로 첨삭하는 서비스. 문제지·답안지·첨삭 결과는 모
 | PDF 글자 | 네이버 CLOVA OCR — 텍스트 PDF·스캔본을 가리지 않고 한 번에 읽는다. **Claude 는 쓰지 않는다.** 없거나 실패하면 pdfjs 로 내려가고, 스캔본이면 실패시킨다 |
 | 한글(HWPX) | zip 안 OWPML 을 직접 읽는다. 외부 호출 없음 |
 
-### 문제지에서 해설 가리기
+### 학생에게 나가는 문제지
 
 한 파일에 문제와 해설이 같이 든 기출이 많아, 학생에게는 배정된 **쪽만 잘라서** 내보낸다
 (`lib/docs/crop.ts`). 그런데 **한 쪽 안에** 둘이 같이 실린 기출도 있어 쪽을 잘라도 소용이 없다.
-그때는 선생님이 관리 화면에서 그 자리를 사각형으로 칠해 두고(`PdfFile.masks`), 서버가
-내보낼 때 흰색으로 덮는다. 좌표는 쪽 크기 대비 0~1 비율이라 쪽 크기가 제각각이어도 버틴다.
-쪽 회전(`/Rotate`)이 걸린 파일은 보이는 모양과 속 좌표계가 어긋나므로 되돌려 자리를 잡는다 —
-`npm run check:mask` 가 네 방향을 모두 건다.
 
-> ⚠ 덮기는 **눈에만** 걸린다. 덮인 자리의 글자는 파일 안에 그대로 남아 있어 긁으면 읽힌다.
-> 넘겨보다 답이 보이는 것은 막지만, 작정하고 파내려는 학생은 막지 못한다.
-> 그것까지 막으려면 그 쪽을 그림으로 구워야 하고, 서버에 PDF 래스터라이저가 따로 있어야 한다.
+덮어 가리는 것도 답이 아니다 — 흰 사각형을 얹어도 그 자리 글자는 파일에 그대로 남아,
+긁어 붙이면 읽힌다. 눈으로 넘겨보는 것만 막고 작정하고 파내는 것은 못 막는다.
+
+그래서 **학생에게 나갈 문제지는 선생님이 따로 만들어 올린다**(`Exam.studentPdf`).
+가공하지 않고 받은 그대로 내보내므로 새어 나갈 것이 애초에 없다.
+올리지 않으면 원본(`questionPdf`)을 쪽 범위대로 잘라 내보낸다.
 
 > CLOVA 는 **API Gateway 연동 후의 공개 Invoke URL**(`https://<id>.apigw.ntruss.com/custom/v1/...`)이
 > 필요하다. `clovaocr-api-kr.ncloud.com` 주소는 사설 IP(10.x)로 풀리는 NCP 내부 전용이라
@@ -100,7 +99,8 @@ meta/system              teacherBootstrapped, firstTeacherUid
 
 universities/{univId}    name, slug, order, active, manuscriptSpec
   exams/{examId}         year, title, session, questionPdf{storagePath,extraction{method,pages,chars}},
-                         solutionPdf{…}, questionCount, analysisStatus
+                         solutionPdf{…}, studentPdf{…}, questionCount, analysisStatus
+                         # studentPdf — 학생에게 그대로 나갈 문제지. 없으면 questionPdf 를 잘라 쓴다
     questions/{qId}      number, prompt, passages[], charTarget, tolerance, lengthNote,
                          points, answerFormat, modelAnswer, source('parsed'|'manual')
     extractions/{kind}   text    # 추출 원문. exam 문서 1MB 제한을 피해 따로 둔다
@@ -325,7 +325,6 @@ Claude 구독을 이미 쓰고 있으면 **API 요금 없이** 같은 일을 할
 | `npm run check:pdfjs` | 폴백 경로(pdfjs)가 브라우저 전역 없이도 뜨는지 |
 | `npm run check:pagecount` | 원본 바이트로 PDF 쪽 수를 세는지 — OCR 응답이 잘렸는지 가리는 데 쓴다 |
 | `npm run check:crop` | 학생에게 배정된 쪽만 나가는지 — 같은 파일의 해설 쪽이 딸려 나가면 안 된다 |
-| `npm run check:mask` | 가림칠이 제자리에 앉는지. 쪽 회전 네 방향을 모두 건다 (외부 호출 없음) |
 | `npm run check:pages <없음>` | 화면 · 인쇄 15종이 뜨는지만 훑는다. Claude 를 부르지 않아 요금이 없다 |
 | `npm run check:print <과제id>` + `check:printfit` | 인쇄 화면을 받아 PDF 로 만든 뒤, 글자가 종이 안에 들어오는지 잰다 |
 | `npm run check:clova` | CLOVA OCR 연동 확인. 내부 전용 주소면 먼저 걸러 준다. 실제 호출이라 요금이 든다 |

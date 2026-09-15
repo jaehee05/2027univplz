@@ -3,8 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/copy-pdf-worker.mjs",
-    "prebuild": "node scripts/copy-pdf-worker.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -33,8 +31,7 @@
     "check:quote": "tsx --conditions=react-server scripts/check-quote.ts",
     "show:prompt": "tsx scripts/show-prompt.ts",
     "check:split": "tsx --conditions=react-server scripts/check-split.ts",
-    "check:pages": "tsx scripts/check-pages.ts",
-    "check:mask": "tsx scripts/check-mask.ts"
+    "check:pages": "tsx scripts/check-pages.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

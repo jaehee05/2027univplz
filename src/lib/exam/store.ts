@@ -8,12 +8,12 @@ import type {
   Exam,
   Extraction,
   PdfFile,
-  PdfMask,
   Question,
   University,
 } from "@/lib/types/exam";
 
-export type PdfKind = "question" | "solution";
+/** `student` 는 학생에게 그대로 나갈 문제지다. 글자를 뽑지 않는다 — 보여 주기만 한다. */
+export type PdfKind = "question" | "solution" | "student";
 
 export function toIso(value: unknown): string | null {
   const ts = value as Timestamp | undefined;
@@ -45,7 +45,6 @@ function toPdfFile(raw: DocumentData | undefined): PdfFile | null {
     size: raw.size ?? 0,
     pageFrom: raw.pageFrom ?? null,
     pageTo: raw.pageTo ?? null,
-    masks: Array.isArray(raw.masks) ? (raw.masks as PdfMask[]) : [],
     uploadedAt: toIso(raw.uploadedAt),
     extraction: raw.extraction
       ? ({
@@ -84,6 +83,7 @@ export function toExam(snap: DocumentSnapshot, univId: string): Exam {
     session: data.session ?? undefined,
     questionPdf: toPdfFile(data.questionPdf),
     solutionPdf: toPdfFile(data.solutionPdf),
+    studentPdf: toPdfFile(data.studentPdf),
     questionCount: data.questionCount ?? 0,
     analysisStatus: data.analysisStatus ?? "none",
     createdAt: toIso(data.createdAt),

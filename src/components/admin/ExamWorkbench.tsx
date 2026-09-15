@@ -45,6 +45,14 @@ export function ExamWorkbench({
           pdf={exam.solutionPdf}
           onExam={setExam}
         />
+        {/* 학생에게 그대로 나갈 문제지. 없으면 위 문제 파일을 쪽 범위대로 잘라 내보낸다. */}
+        <PdfPanel
+          univId={exam.univId}
+          examId={exam.id}
+          kind="student"
+          pdf={exam.studentPdf}
+          onExam={setExam}
+        />
       </div>
 
       <QuestionEditor

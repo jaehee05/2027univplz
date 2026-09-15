@@ -3,16 +3,25 @@
 import { ref as storageRef, uploadBytesResumable } from "firebase/storage";
 import { useState } from "react";
 
-import { MaskEditor } from "@/components/admin/MaskEditor";
+import type { PdfKind } from "@/lib/exam/store";
 import { clientStorage } from "@/lib/firebase/client";
 import type { Exam, PdfFile } from "@/lib/types/exam";
 
-const KIND_LABEL = { question: "문제 파일", solution: "해설 · 모범답안 파일" } as const;
+const KIND_LABEL = {
+  question: "문제 파일",
+  solution: "해설 · 모범답안 파일",
+  student: "학생용 문제지",
+} as const;
+
+const KIND_HINT: Record<string, string> = {
+  student:
+    "학생에게 이 파일이 그대로 나갑니다. 해설이 섞이지 않은, 문제만 있는 PDF 를 올리세요. 올리지 않으면 문제 파일을 쪽 범위대로 잘라서 내보냅니다.",
+};
 
 interface Props {
   univId: string;
   examId: string;
-  kind: "question" | "solution";
+  kind: PdfKind;
   pdf: PdfFile | null;
   onExam: (exam: Exam) => void;
 }
@@ -30,7 +39,6 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [masking, setMasking] = useState(false);
 
   const base = `/api/universities/${univId}/exams/${examId}`;
 
@@ -133,8 +141,8 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
   }
 
   const extraction = pdf?.extraction ?? null;
-  // 가림칠은 PDF 에만 걸 수 있다 — 한글 문서는 글자로만 나간다.
-  const isPdf = Boolean(pdf && pdf.fileName.toLowerCase().endsWith(".pdf"));
+  // 학생용 문제지는 보여 주기만 한다 — 글자를 뽑을 일이 없다.
+  const forStudent = kind === "student";
 
   return (
     <section className="rounded-lg border border-neutral-200 p-4">
@@ -146,6 +154,10 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
           </span>
         ) : null}
       </div>
+
+      {KIND_HINT[kind] ? (
+        <p className="mt-1 text-xs leading-5 text-neutral-500">{KIND_HINT[kind]}</p>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <label className="cursor-pointer rounded-md border border-neutral-300 px-3 py-2 text-sm">
@@ -162,14 +174,16 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
           />
         </label>
 
-        <button
-          type="button"
-          onClick={() => void extract()}
-          disabled={!pdf || extracting || progress !== null}
-          className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
-        >
-          {extracting ? "추출 중…" : extraction ? "다시 추출" : "텍스트 추출"}
-        </button>
+        {forStudent ? null : (
+          <button
+            type="button"
+            onClick={() => void extract()}
+            disabled={!pdf || extracting || progress !== null}
+            className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+          >
+            {extracting ? "추출 중…" : extraction ? "다시 추출" : "텍스트 추출"}
+          </button>
+        )}
 
         {progress !== null ? (
           <span className="text-sm text-neutral-500">올리는 중 {progress}%</span>
@@ -230,22 +244,6 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
                 범위 바꾸기
               </button>
 
-              {/* 쪽을 잘라도 한 쪽 안에 해설이 같이 있으면 답이 새 나간다. */}
-              {isPdf ? (
-                <button
-                  type="button"
-                  onClick={() => setMasking((value) => !value)}
-                  className={[
-                    "rounded border px-2 py-0.5 text-xs",
-                    pdf.masks.length > 0
-                      ? "border-rose-300 bg-rose-50 text-rose-700"
-                      : "border-neutral-300",
-                  ].join(" ")}
-                >
-                  가림칠
-                  {pdf.masks.length > 0 ? ` ${pdf.masks.length}곳` : ""}
-                </button>
-              ) : null}
             </div>
           )}
         </div>
@@ -280,7 +278,7 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
             </>
           ) : null}
         </dl>
-      ) : pdf ? (
+      ) : pdf && !forStudent ? (
         <p className="mt-3 text-sm text-neutral-500">아직 텍스트를 뽑지 않았습니다.</p>
       ) : null}
 
@@ -291,21 +289,6 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
             {preview || "(빈 결과)"}
           </pre>
         </details>
-      ) : null}
-
-      {masking && pdf && isPdf ? (
-        <div className="mt-3">
-          <MaskEditor
-            univId={univId}
-            examId={examId}
-            kind={kind}
-            pageFrom={pdf.pageFrom}
-            pageTo={pdf.pageTo}
-            initial={pdf.masks}
-            onExam={onExam}
-            onClose={() => setMasking(false)}
-          />
-        </div>
       ) : null}
 
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}

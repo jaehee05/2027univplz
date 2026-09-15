@@ -31,8 +31,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // public/ 에 내놓은 정적 파일은 지나가게 둔다.
-  // pdfjs 워커(.mjs)가 여기 안 걸려 로그인으로 튕기면 가림칠 화면이 통째로 죽는다.
+  // public/ 에 둔 정적 파일은 지나가게 둔다 — 로그인 화면으로 튕길 이유가 없다.
   matcher: [
     "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|pdf|mjs|js|css|woff2?)$).*)",
   ],
