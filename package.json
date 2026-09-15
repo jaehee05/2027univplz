@@ -14,6 +14,7 @@
     "check:zip": "tsx scripts/check-zip.ts",
     "smoke:full": "tsx scripts/smoke-full.ts",
     "check:hwpx": "tsx scripts/check-hwpx.ts",
+    "check:handout": "tsx scripts/check-handout.ts",
     "check:clova": "tsx scripts/check-clova.ts",
     "check:pdfbuf": "tsx scripts/check-pdf-buffer.ts",
     "check:pdfjs": "tsx scripts/check-pdfjs.ts",

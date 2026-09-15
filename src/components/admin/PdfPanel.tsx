@@ -15,7 +15,7 @@ const KIND_LABEL = {
 
 const KIND_HINT: Record<string, string> = {
   student:
-    "학생에게 이 파일이 그대로 나갑니다. 해설이 섞이지 않은, 문제만 있는 PDF 를 올리세요. 올리지 않으면 문제 파일을 쪽 범위대로 잘라서 내보냅니다.",
+    "학생에게 이 파일이 그대로 나갑니다. 아래에서 문제지 초안(HWPX)을 받아 한글에서 검수한 뒤, ‘PDF 로 저장’ 해서 그 PDF 를 올리세요. 올리지 않으면 문제 파일을 쪽 범위대로 잘라서 내보냅니다.",
 };
 
 interface Props {
@@ -157,6 +157,29 @@ export function PdfPanel({ univId, examId, kind, pdf, onExam }: Props) {
 
       {KIND_HINT[kind] ? (
         <p className="mt-1 text-xs leading-5 text-neutral-500">{KIND_HINT[kind]}</p>
+      ) : null}
+
+      {forStudent ? (
+        <ol className="mt-3 space-y-1.5 rounded-lg bg-neutral-50 p-3 text-xs leading-5 text-neutral-600">
+          <li>
+            <b className="text-neutral-800">1.</b>{" "}
+            <a
+              href={`${base}/handout`}
+              className="rounded-md border border-neutral-300 bg-white px-2 py-1 font-medium text-neutral-900"
+            >
+              문제지 초안(HWPX) 받기
+            </a>{" "}
+            — 뽑아 둔 글자로 제시문과 논제를 엮어 줍니다.
+          </li>
+          <li>
+            <b className="text-neutral-800">2.</b> 한글에서 열어 오탈자와 제시문 범위를 손봅니다.
+            OCR 결과라 확인이 필요합니다.
+          </li>
+          <li>
+            <b className="text-neutral-800">3.</b> 한글에서 <b>파일 &gt; PDF 로 저장</b> 한 뒤,
+            그 PDF 를 아래에서 올립니다.
+          </li>
+        </ol>
       ) : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

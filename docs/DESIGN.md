@@ -45,6 +45,25 @@ Claude API로 첨삭하는 서비스. 문제지·답안지·첨삭 결과는 모
 가공하지 않고 받은 그대로 내보내므로 새어 나갈 것이 애초에 없다.
 올리지 않으면 원본(`questionPdf`)을 쪽 범위대로 잘라 내보낸다.
 
+맨손으로 만들지는 않는다. 뽑아 둔 글자로 **문제지 초안을 HWPX 로 엮어 준다**
+(`lib/docs/hwpx-write.ts` · `GET …/exams/[examId]/handout`). 제시문과 논제만 담는다 —
+답안지는 앱이 원고지 규격대로 따로 인쇄한다.
+
+```
+CLOVA OCR → 문항 파싱 → [앱] 문제지 초안 .hwpx
+                            ↓
+                     [선생님] 한글에서 검수 → 파일 > PDF 로 저장
+                            ↓
+                     [선생님] 그 PDF 를 studentPdf 로 올림 → 학생에게 그대로
+```
+
+PDF 변환을 앱이 하지 않는 이유 — HWPX 를 PDF 로 바꾸려면 한글이나 LibreOffice 같은
+오피스 엔진이 있어야 하는데 Vercel 서버리스에서는 돌릴 수 없다. 순수 JS 렌더러도 없다.
+한글에 맡기면 클릭이 하나 늘지만 **선생님이 손본 서식 그대로** 나가고, 뜨는 모양이 확실하다.
+
+> `npm run check:handout` 은 zip 짜임새 · XML · 글자 왕복까지 잰다.
+> **한글이 실제로 여는지는 못 잰다** — 받아서 한 번 열어 봐야 한다.
+
 > CLOVA 는 **API Gateway 연동 후의 공개 Invoke URL**(`https://<id>.apigw.ntruss.com/custom/v1/...`)이
 > 필요하다. `clovaocr-api-kr.ncloud.com` 주소는 사설 IP(10.x)로 풀리는 NCP 내부 전용이라
 > 바깥에서 닿지 않는다. 내부 전용 주소는 부르기 전에 걸러 내고 사유를 관리 화면에 남긴다.
@@ -168,6 +187,7 @@ GET  POST   /api/universities                       목록 · 추가(기본 6개
 PATCH DELETE /api/universities/[univId]              이름 · 활성 · 삭제
 GET  POST   /api/universities/[univId]/exams         연도별 기출 목록 · 생성
 GET PATCH DELETE  …/exams/[examId]                   조회 · PDF 등록 · 삭제
+GET         …/exams/[examId]/handout                 학생용 문제지 초안 (.hwpx) 내려받기
 POST        …/exams/[examId]/extract                 PDF 텍스트 추출 (pdfjs → Claude 폴백)
 POST        …/exams/[examId]/parse-questions         문항 파싱 (저장하지 않고 결과만)
 GET  PUT    …/exams/[examId]/questions               문항 조회 · 통째로 저장
@@ -321,6 +341,7 @@ Claude 구독을 이미 쓰고 있으면 **API 요금 없이** 같은 일을 할
 | `npm run check:manuscript` | 원고지 배치·작성법 규칙 단위 검증 (외부 호출 없음) |
 | `npm run check:zip` | zip 에서 기출 파일만 골라내는지 (외부 호출 없음) |
 | `npm run check:hwpx` | 한글(HWPX) 글자·쪽 추출 (외부 호출 없음) |
+| `npm run check:handout` | 앱이 만든 문제지 HWPX 의 zip·XML·글자 왕복 (외부 호출 없음) |
 | `npm run check:pdfbuf` | pdfjs 가 원본 버퍼를 가져가지 않는지 — 같은 파일을 OCR 로 다시 보낼 수 있어야 한다 |
 | `npm run check:pdfjs` | 폴백 경로(pdfjs)가 브라우저 전역 없이도 뜨는지 |
 | `npm run check:pagecount` | 원본 바이트로 PDF 쪽 수를 세는지 — OCR 응답이 잘렸는지 가리는 데 쓴다 |
