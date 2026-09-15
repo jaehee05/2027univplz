@@ -92,10 +92,15 @@ export function ManuscriptGrid({
   const labelSize = Math.max(9, Math.min(13, Math.round(cellSize * 0.52)));
   const labelHeight = labelSize + 2;
   /**
-   * 번호는 칸 위로 통째로 올라간다. 첫 줄에서는 격자 밖으로 나가 잘려 보이므로,
-   * 올라가는 만큼 바깥에 자리를 만들어 둔다.
+   * 번호가 붙는 원고지는 **줄마다 위에 빈 띠**를 두고 거기에 번호를 앉힌다.
+   * 칸 위에 그냥 얹으면 윗줄 글자를 가린다 — 원고지는 칸이 빈틈없이 붙어 있어서
+   * 번호가 들어갈 자리가 따로 없다.
+   *
+   * 번호가 없는 원고지(쓰는 화면 · 빈 답안지)는 띠를 두지 않는다. 칸이 그대로 이어져
+   * 여느 원고지와 같은 모양이 된다.
    */
-  const overhang = labelHeight;
+  const numbered = issues.some((issue) => issue.index != null);
+  const gutter = numbered ? labelHeight : 0;
 
   const filled = useMemo(() => {
     const map = new Map<string, Cell>();
@@ -188,16 +193,23 @@ export function ManuscriptGrid({
     <div className="overflow-x-auto">
       <div
         className="inline-flex items-start"
-        style={{
-          ["--cell" as string]: `${cellSize}px`,
-          // 왼쪽 위로 튀어나오는 번호 배지가 잘리지 않게 자리를 둔다.
-          paddingTop: `${overhang}px`,
-        }}
+        style={{ ["--cell" as string]: `${cellSize}px` }}
       >
-        {/* 바깥 테두리는 여기 한 번만 두르고, 안쪽 격자선은 모두 같은 굵기·색으로 그린다 */}
-        <div className="border border-sky-400 bg-white">
+        {/*
+          번호 띠가 없으면 바깥 테두리를 한 번만 두르고 안쪽 격자선을 그린다 (여느 원고지).
+          띠가 있으면 줄이 서로 떨어지므로 줄마다 테두리를 두른다.
+        */}
+        <div className={gutter ? "" : "border border-sky-400 bg-white"}>
           {grid.map((line, row) => (
-            <div key={row} className="flex">
+            <div
+              key={row}
+              className={[
+                "flex",
+                gutter ? "border border-sky-400 bg-white" : "",
+              ].join(" ")}
+              // 번호가 앉을 빈 띠. 첫 줄 위에도 똑같이 둔다.
+              style={gutter ? { marginTop: `${gutter}px` } : undefined}
+            >
               {row === 0 && spec.labelCells > 0 ? (
                 <div
                   className="flex shrink-0 items-center justify-center border-r border-b border-sky-200 font-medium text-sky-700"
@@ -238,7 +250,7 @@ export function ManuscriptGrid({
                       // shrink-0 — 좁은 자리에 넣으면 칸이 눌려 글자가 어긋난다. 대신 가로로 스크롤한다.
                       "relative flex shrink-0 items-center justify-center border-sky-200 leading-none",
                       isLastCol ? "" : "border-r",
-                      row === lastRow ? "" : "border-b",
+                      gutter || row === lastRow ? "" : "border-b",
                       mark ? MARK_CLASS[mark] : overLimit ? "bg-red-50" : "bg-transparent",
                       active.has(key) ? "ring-2 ring-inset ring-neutral-900" : "",
                       isCaret ? "ring-2 ring-inset ring-sky-500" : "",
@@ -281,12 +293,12 @@ export function ManuscriptGrid({
                       <span
                         key={mark.index}
                         className={[
-                          "pointer-events-none absolute rounded-[2px] bg-white px-[1px] font-bold tabular-nums",
+                          "pointer-events-none absolute font-bold tabular-nums",
                           LABEL_CLASS[mark.severity],
                         ].join(" ")}
                         style={{
-                          // 칸 위로 통째로 올린다 — 칸 안 글자를 가리지 않는다.
-                          top: `${-labelHeight}px`,
+                          // 줄 위 빈 띠 안에 앉는다 — 어느 글자도 가리지 않는다.
+                          top: `${-(labelHeight + 1)}px`,
                           left: `${order * (labelSize * 1.5)}px`,
                           height: `${labelHeight}px`,
                           fontSize: `${labelSize}px`,
@@ -315,7 +327,11 @@ export function ManuscriptGrid({
               <div
                 key={row}
                 className="flex w-12 items-center pl-1 text-[10px] text-neutral-400"
-                style={{ height: "var(--cell)" }}
+                style={{
+                  height: "var(--cell)",
+                  // 줄 위 번호 띠만큼 눈금도 함께 내려가야 줄과 나란히 선다.
+                  marginTop: gutter ? `${gutter + 2}px` : undefined,
+                }}
               >
                 {showTick ? cumulativeThrough(spec, row) : ""}
               </div>
