@@ -109,15 +109,15 @@ function cell(spec: Cellspec, col: number, row: number, height: number): string 
   return (
     `<hp:tc name="" header="${row === 0 ? 1 : 0}" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="${spec.shaded ? 3 : 2}">` +
     `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">` +
-    `<hp:p paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
-    `<hp:run charPrIDRef="0"><hp:t>${escapeXml(text)}</hp:t></hp:run>` +
+    `<hp:p paraPrIDRef="${spec.shaded ? 6 : 1}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
+    `<hp:run charPrIDRef="${spec.shaded ? 5 : 0}"><hp:t>${escapeXml(text)}</hp:t></hp:run>` +
     `</hp:p>` +
     `</hp:subList>` +
     `<hp:cellAddr colAddr="${col}" rowAddr="${row}"/>` +
     `<hp:cellSpan colSpan="1" rowSpan="1"/>` +
     `<hp:cellSz width="${width}" height="${height}"/>` +
-    // 라벨 칸은 좁아서 여백을 두면 글자가 들어가지 못한다.
-    `<hp:cellMargin left="${spec.shaded ? 0 : 510}" right="${spec.shaded ? 0 : 510}" top="141" bottom="141"/>` +
+    // 라벨 칸은 좁고 낮아서 여백을 두면 글자가 밀려난다.
+    `<hp:cellMargin left="${spec.shaded ? 0 : 510}" right="${spec.shaded ? 0 : 510}" top="${spec.shaded ? 0 : 141}" bottom="${spec.shaded ? 0 : 141}"/>` +
     `</hp:tc>`
   );
 }
@@ -204,6 +204,13 @@ function headerXml(): string {
     { id: 2, size: 1200, bold: 1, color: "#000000", font: 0 },
     { id: 3, size: 900, bold: 0, color: "#666666", font: 0 },
     { id: 4, size: 1000, bold: 1, color: "#000000", font: 0 },
+    /**
+     * 표 라벨 — 좁은 칸에서 한 자씩 세로로 감긴다.
+     * `모집단위` 네 자가 칸 높이(3770) 안에 들어와야 한다.
+     * 7pt 는 줄 높이가 대략 1.2배라 네 줄에 3360 — 여유가 있다.
+     * 8pt 면 3840 이 되어 넘쳐 밀린다.
+     */
+    { id: 5, size: 700, bold: 0, color: "#000000", font: 0 },
   ]
     .map(
       (shape) =>
@@ -228,6 +235,8 @@ function headerXml(): string {
     // 제시문 머리 · 본문 — 테두리를 물리고 `connect` 로 이어 붙여 하나의 상자를 만든다.
     { id: 4, align: "LEFT", indent: 0, prev: 300, next: 200, box: "head" },
     { id: 5, align: "JUSTIFY", indent: 1000, prev: 0, next: 200, box: "body" },
+    // 표 라벨 — 줄 간격을 붙여야 네 자가 칸 안에 들어온다.
+    { id: 6, align: "CENTER", indent: 0, prev: 0, next: 0, tight: true },
   ]
     .map(
       (shape) =>
@@ -241,7 +250,7 @@ function headerXml(): string {
         `<hc:left value="0" unit="HWPUNIT"/><hc:right value="0" unit="HWPUNIT"/>` +
         `<hc:prev value="${shape.prev}" unit="HWPUNIT"/><hc:next value="${shape.next}" unit="HWPUNIT"/>` +
         `</hh:margin>` +
-        `<hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/>` +
+        `<hh:lineSpacing type="PERCENT" value="${shape.tight ? 100 : 160}" unit="HWPUNIT"/>` +
         (shape.box
           ? // 잇따르는 문단끼리 테두리를 하나로 잇는다. 그래야 제시문 전체가 한 상자가 된다.
             `<hh:border borderFillIDRef="4" offsetLeft="600" offsetRight="600" offsetTop="${shape.box === "head" ? 400 : 0}" offsetBottom="${shape.box === "head" ? 0 : 400}" connect="1" ignoreMargin="0"/>`
@@ -264,10 +273,10 @@ function headerXml(): string {
     borderFill(3, "SOLID", LABEL_FILL) +
     borderFill(4, "SOLID", "none", "0.1 mm") +
     `</hh:borderFills>` +
-    `<hh:charProperties itemCnt="5">${charShapes}</hh:charProperties>` +
+    `<hh:charProperties itemCnt="6">${charShapes}</hh:charProperties>` +
     `<hh:tabProperties itemCnt="1"><hh:tabPr id="0" autoTabLeft="0" autoTabRight="0"/></hh:tabProperties>` +
     `<hh:numberings itemCnt="0"/>` +
-    `<hh:paraProperties itemCnt="6">${paraShapes}</hh:paraProperties>` +
+    `<hh:paraProperties itemCnt="7">${paraShapes}</hh:paraProperties>` +
     `<hh:styles itemCnt="1">` +
     `<hh:style id="0" type="PARA" name="바탕글" engName="Normal" paraPrIDRef="0" charPrIDRef="0" nextStyleIDRef="0" langID="1042" lockForm="0"/>` +
     `</hh:styles>` +
@@ -287,8 +296,9 @@ function sectionXml(paragraphs: string[]): string {
     // 실제 대학 기출 파일을 열어 보니 세로 A4 도 landscape="WIDELY" 였다.
     // 이름과 달리 가로/세로를 뜻하는 값이 아니다 — 크기(width < height)가 방향을 정한다.
     `<hp:pagePr landscape="WIDELY" width="59528" height="84188" gutterType="LEFT_ONLY">` +
-    // 연세대 문제지의 본문 영역(좌 65pt · 우 49pt · 상하 넉넉히)에 맞춘다.
-    `<hp:margin header="4252" footer="4252" gutter="0" left="6500" right="4900" top="5100" bottom="5000"/>` +
+    // 여백은 좁게 — 제시문이 길어 한 쪽에 최대한 담아야 한다.
+    // 머리말·꼬리말 자리는 위·아래 여백에 더해지므로 그냥 두면 종이가 많이 빈다.
+    `<hp:margin header="1400" footer="1400" gutter="0" left="4000" right="4000" top="3500" bottom="3500"/>` +
     `</hp:pagePr>` +
     `<hp:footNotePr>` +
     `<hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/>` +
@@ -457,11 +467,11 @@ export function buildHandoutHwpx(input: HandoutInput): Uint8Array {
       kind: "table",
       rows: [
         [
-          { text: "모집단위", width: 1500, shaded: true },
+          { text: "모집단위", width: 1300, shaded: true },
           { text: "", width: 8770 },
-          { text: "수험번호", width: 1500, shaded: true },
+          { text: "수험번호", width: 1300, shaded: true },
           { text: "", width: 8170 },
-          { text: "성명", width: 1500, shaded: true },
+          { text: "성명", width: 1300, shaded: true },
           { text: "", width: 7730 },
         ],
       ],

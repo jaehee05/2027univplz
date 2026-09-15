@@ -174,6 +174,25 @@ check("표는 오른쪽 끝에 붙는다", /<hp:pos[^>]*horzAlign="RIGHT"/.test(
 
 check("라벨 바탕색 #e3dcc1", headerXmlText.includes('faceColor="#e3dcc1"'));
 check("제목 글꼴 연세제목체", headerXmlText.includes("연세제목체"));
+
+// 라벨은 좁은 칸에서 한 자씩 감긴다. `모집단위` 네 줄이 칸 높이 안에 들어와야 한다.
+const labelSize = Number(headerXmlText.match(/<hh:charPr id="5" height="(\d+)"/)?.[1] ?? 0);
+const rowHeight = Number(sectionXmlText.match(/<hp:cellSz width="\d+" height="(\d+)"/)?.[1] ?? 0);
+check(
+  "표 라벨 네 줄이 칸 안에 들어온다",
+  labelSize > 0 && rowHeight > 0 && labelSize * 1.2 * 4 < rowHeight,
+  `${labelSize / 100}pt × 4줄 = ${(labelSize * 1.2 * 4) / 100}pt / 칸 ${rowHeight / 100}pt`,
+);
+check("라벨 줄 간격을 붙였다", /<hh:paraPr id="6"[\s\S]*?value="100"/.test(headerXmlText));
+
+// 여백 — 좁게. 머리말·꼬리말 자리까지 더해 위아래가 벌어지지 않게 한다.
+const margin = sectionXmlText.match(/<hp:margin ([^/]*)\/>/)?.[1] ?? "";
+const mm = (name: string) => Number(margin.match(new RegExp(`${name}="(\\d+)"`))?.[1] ?? 0);
+check(
+  "쪽 여백이 좁다",
+  mm("left") <= 4000 && mm("right") <= 4000 && mm("top") + mm("header") <= 5000,
+  `좌 ${mm("left") / 100}pt · 우 ${mm("right") / 100}pt · 위 ${(mm("top") + mm("header")) / 100}pt`,
+);
 check(
   "제목만 그 글꼴을 쓴다",
   /<hh:charPr id="1"[\s\S]*?<hh:fontRef hangul="2"/.test(headerXmlText),
