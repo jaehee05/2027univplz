@@ -1,8 +1,12 @@
+import type { Metadata } from "next";
+
 import { requireTeacher } from "@/lib/auth/dal";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { AssignmentBoard, type BoardRow } from "@/components/admin/AssignmentBoard";
 import { totalScore } from "@/lib/types/work";
 import { groupWorkBy, listAssignmentsFor } from "@/lib/work/store";
+
+export const metadata: Metadata = { title: "과제 · 첨삭" };
 
 export default async function AssignmentsPage() {
   const user = await requireTeacher();

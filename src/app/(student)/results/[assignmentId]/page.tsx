@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -12,6 +14,8 @@ import {
   toAssignment,
   workRows,
 } from "@/lib/work/store";
+
+export const metadata: Metadata = { title: "첨삭 결과" };
 
 export default async function ResultPage({ params }: PageProps<"/results/[assignmentId]">) {
   const user = await requireUser();

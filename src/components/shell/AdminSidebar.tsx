@@ -141,7 +141,7 @@ export function AdminSidebar({
             </svg>
           </button>
           <span className="font-bold tracking-tight">
-            논술 <span className="text-brand-600">첨삭</span>
+            <span className="text-brand-600">KJH</span>EDU
             <span className="ml-1.5 text-xs font-normal text-neutral-400">관리</span>
           </span>
           {counts.pending + counts.waitingStudents > 0 ? (
@@ -165,7 +165,7 @@ export function AdminSidebar({
       {/* 넓은 화면 — 왼쪽 고정 기둥 */}
       <aside className="hidden w-60 shrink-0 border-r border-neutral-200 bg-white lg:flex lg:h-dvh lg:flex-col lg:sticky lg:top-0 print:hidden">
         <div className="px-5 py-5 font-bold tracking-tight">
-          논술 <span className="text-brand-600">첨삭</span>
+          <span className="text-brand-600">KJH</span>EDU
           <span className="ml-1.5 text-xs font-normal text-neutral-400">관리</span>
         </div>
 

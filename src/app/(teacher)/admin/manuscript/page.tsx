@@ -1,6 +1,10 @@
+import type { Metadata } from "next";
+
 import { requireTeacher } from "@/lib/auth/dal";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { ManuscriptPlayground } from "@/components/manuscript/ManuscriptPlayground";
+
+export const metadata: Metadata = { title: "원고지" };
 
 export default async function ManuscriptPage() {
   const user = await requireTeacher();

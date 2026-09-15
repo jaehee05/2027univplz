@@ -1,9 +1,13 @@
+import type { Metadata } from "next";
+
 import Link from "next/link";
 
 import { AssignmentCard } from "@/components/student/AssignmentCard";
 import { requireUser } from "@/lib/auth/dal";
 import { groupWorkBy, listAssignmentsFor } from "@/lib/work/store";
 import { questionProgress, studentStats } from "@/lib/work/summary";
+
+export const metadata: Metadata = { title: "내 과제" };
 
 function StatCard({
   value,

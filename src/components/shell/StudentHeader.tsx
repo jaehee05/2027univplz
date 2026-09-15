@@ -21,7 +21,7 @@ export function StudentHeader({ name }: { name: string }) {
     <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/90 backdrop-blur print:hidden">
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-4 px-4 sm:px-6">
         <Link href="/dashboard" className="font-bold tracking-tight">
-          논술 <span className="text-brand-600">첨삭</span>
+          <span className="text-brand-600">KJH</span>EDU
         </Link>
 
         <nav className="ml-4 hidden gap-1 text-sm md:flex">

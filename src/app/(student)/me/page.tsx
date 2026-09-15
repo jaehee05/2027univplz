@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
+
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { requireUser } from "@/lib/auth/dal";
 import { groupWorkBy, listAssignmentsFor } from "@/lib/work/store";
 import { studentStats } from "@/lib/work/summary";
+
+export const metadata: Metadata = { title: "내 정보" };
 
 export default async function MePage() {
   const user = await requireUser();

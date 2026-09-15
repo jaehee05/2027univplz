@@ -1,9 +1,13 @@
+import type { Metadata } from "next";
+
 import Link from "next/link";
 
 import { requireTeacher } from "@/lib/auth/dal";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { UniversityManager } from "@/components/admin/UniversityManager";
 import { listUniversities } from "@/lib/exam/store";
+
+export const metadata: Metadata = { title: "대학 · 기출" };
 
 export default async function UniversitiesPage() {
   const user = await requireTeacher();

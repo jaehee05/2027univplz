@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
+
 import { PrintFrame } from "@/components/print/PrintFrame";
 import { PrintSheet } from "@/components/print/PrintSheet";
 import { loadForPrint } from "@/lib/work/print";
 import { lengthRuleOf } from "@/lib/work/store";
+
+export const metadata: Metadata = { title: "빈 답안지" };
 
 export default async function PrintSheetPage({ params }: PageProps<"/print/sheet/[assignmentId]">) {
   const { assignmentId } = await params;

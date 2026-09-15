@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
+
 import { PrintFrame } from "@/components/print/PrintFrame";
 import { PrintSheet } from "@/components/print/PrintSheet";
 import { loadForPrint } from "@/lib/work/print";
 import { lengthRuleOf } from "@/lib/work/store";
+
+export const metadata: Metadata = { title: "작성된 답안지" };
 
 export default async function PrintAnswerPage({
   params,

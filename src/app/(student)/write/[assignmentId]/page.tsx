@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { FieldValue } from "firebase-admin/firestore";
@@ -7,6 +9,8 @@ import { WriteWorkspace } from "@/components/manuscript/WriteWorkspace";
 import { examRef, listQuestions, toExam } from "@/lib/exam/store";
 import { mergePassages } from "@/lib/exam/passages";
 import { answers, assignmentRef, listAnswersOf, toAssignment } from "@/lib/work/store";
+
+export const metadata: Metadata = { title: "답안 쓰기" };
 
 export default async function WritePage({ params }: PageProps<"/write/[assignmentId]">) {
   const user = await requireUser();

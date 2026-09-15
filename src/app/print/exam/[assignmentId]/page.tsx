@@ -1,8 +1,12 @@
+import type { Metadata } from "next";
+
 import { PrintFrame } from "@/components/print/PrintFrame";
 import { PrintSheet } from "@/components/print/PrintSheet";
 import { ExamPaper } from "@/components/print/ExamPaper";
 import { loadForPrint } from "@/lib/work/print";
 import { lengthRuleOf } from "@/lib/work/store";
+
+export const metadata: Metadata = { title: "문제지" };
 
 export default async function PrintExamPage({ params }: PageProps<"/print/exam/[assignmentId]">) {
   const { assignmentId } = await params;

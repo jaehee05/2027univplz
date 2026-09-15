@@ -1,9 +1,13 @@
+import type { Metadata } from "next";
+
 import Link from "next/link";
 
 import { requireTeacher } from "@/lib/auth/dal";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { listUniversities } from "@/lib/exam/store";
 import { listAssignmentsFor, listStudents } from "@/lib/work/store";
+
+export const metadata: Metadata = { title: "관리" };
 
 export default async function AdminPage() {
   const user = await requireTeacher();

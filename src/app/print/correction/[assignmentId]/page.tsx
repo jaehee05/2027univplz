@@ -1,9 +1,13 @@
+import type { Metadata } from "next";
+
 import { markLabel, numbered } from "@/components/correction/tone";
 import { PrintFrame } from "@/components/print/PrintFrame";
 import { PrintSheet } from "@/components/print/PrintSheet";
 import { loadForPrint, type PrintRow } from "@/lib/work/print";
 import { lengthRuleOf } from "@/lib/work/store";
 import { SEVERITY_LABEL, totalScore, type Assignment } from "@/lib/types/work";
+
+export const metadata: Metadata = { title: "첨삭 결과지" };
 
 const SEVERITY_MARK: Record<string, string> = {
   good: "○",

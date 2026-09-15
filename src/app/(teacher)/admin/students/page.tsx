@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
+
 import { requireTeacher } from "@/lib/auth/dal";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { StudentManager } from "@/components/admin/StudentManager";
 import { listStudents } from "@/lib/work/store";
+
+export const metadata: Metadata = { title: "학생" };
 
 export default async function StudentsPage() {
   const user = await requireTeacher();

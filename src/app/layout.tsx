@@ -10,7 +10,16 @@ const notoSansKr = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "인문 논술 첨삭",
+  /**
+   * 탭에 뜨는 이름. 화면마다 제 이름만 적으면 여기 틀에 끼워져
+   * `KJHEDU - 내 과제` 처럼 나온다. 제 이름이 없는 화면은 `default` 가 쓰인다.
+   *
+   * 인쇄 화면도 이 이름을 쓴다 — 브라우저가 종이 머리글에 문서 제목을 얹는다.
+   */
+  title: {
+    default: "KJHEDU",
+    template: "KJHEDU - %s",
+  },
   description: "대학별 채점 기준에 맞춘 인문 논술 답안 작성 · 첨삭 서비스",
 };
 

@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { notFound } from "next/navigation";
 
 import { requireTeacher } from "@/lib/auth/dal";
@@ -13,6 +15,8 @@ import {
   toUniversity,
   universityRef,
 } from "@/lib/exam/store";
+
+export const metadata: Metadata = { title: "기출 작업대" };
 
 export default async function ExamPage({
   params,

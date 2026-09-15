@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
+
 import { AssignmentCard } from "@/components/student/AssignmentCard";
 import { requireUser } from "@/lib/auth/dal";
 import { groupWorkBy, listAssignmentsFor } from "@/lib/work/store";
 import { questionProgress } from "@/lib/work/summary";
+
+export const metadata: Metadata = { title: "첨삭 결과" };
 
 /** 지난 과제 전부. 공개된 첨삭은 점수까지 카드에 얹힌다. */
 export default async function HistoryPage() {
