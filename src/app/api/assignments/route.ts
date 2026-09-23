@@ -23,10 +23,13 @@ const bodySchema = z.object({
   dueAt: z.string().trim().max(10).nullable().optional(),
   /** 학생에게 보일 이름. 비우면 기출 이름이 그대로 나간다. */
   paperName: z.string().trim().max(60).nullable().optional(),
+  /** 내줄 문항. 없으면 시험지의 문항을 전부 낸다. */
+  questionIds: z.array(z.string().min(1)).min(1).max(50).optional(),
 });
 
 /**
- * 과제 배정 — 단위는 **시험지 하나**다. 그 시험지의 문항을 전부 낸다.
+ * 과제 배정 — 시험지 하나에서 고른 문항(기본은 전부)을 한 과제로 낸다.
+ * 같은 학생이 이미 받은 문항은 다시 내지 않고, 남은 문항만 새 과제로 낸다.
  * 문항마다 빈 답안을 미리 만들어 둔다. 학생이 들어오는 순간 바로 쓸 수 있게.
  */
 export async function POST(request: Request) {
@@ -40,7 +43,7 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const { studentIds, univId, examId, dueAt, paperName } = parsed.data;
+  const { studentIds, univId, examId, dueAt, paperName, questionIds } = parsed.data;
 
   const [univSnap, examSnap, examQuestions] = await Promise.all([
     universityRef(univId).get(),
@@ -61,7 +64,13 @@ export async function POST(request: Request) {
   const exam = toExam(examSnap, univId);
 
   // 기출을 나중에 고쳐도 이미 내준 과제의 조건은 그대로 남아야 한다.
-  const copied: AssignmentQuestion[] = examQuestions.map((question) => ({
+  const chosen = questionIds
+    ? examQuestions.filter((question) => questionIds.includes(question.id))
+    : examQuestions;
+  if (chosen.length === 0) {
+    return Response.json({ error: "내줄 문항을 고르세요." }, { status: 400 });
+  }
+  const copied: AssignmentQuestion[] = chosen.map((question) => ({
     questionId: question.id,
     number: question.number,
     prompt: question.prompt,
@@ -84,11 +93,15 @@ export async function POST(request: Request) {
   }
 
   const existing = await assignments().where("assignedBy", "==", auth.user.uid).limit(500).get();
-  const already = new Set(
-    existing.docs
-      .filter((doc) => doc.data().examId === examId)
-      .map((doc) => doc.data().studentId as string),
-  );
+  // 학생마다 이 기출에서 이미 받은 문항
+  const already = new Map<string, Set<string>>();
+  for (const doc of existing.docs) {
+    const data = doc.data();
+    if (data.examId !== examId) continue;
+    const got = already.get(data.studentId) ?? new Set<string>();
+    for (const question of data.questions ?? []) got.add(String(question.questionId));
+    already.set(data.studentId, got);
+  }
 
   const batch = assignments().firestore.batch();
   let created = 0;
@@ -96,7 +109,9 @@ export async function POST(request: Request) {
 
   studentDocs.forEach((snap) => {
     const name = snap.data()?.displayName ?? "";
-    if (already.has(snap.id)) {
+    const got = already.get(snap.id);
+    const questions = copied.filter((question) => !got?.has(question.questionId));
+    if (questions.length === 0) {
       skipped.push(name);
       return;
     }
@@ -111,7 +126,7 @@ export async function POST(request: Request) {
       examTitle: `${exam.year}학년도 ${exam.title}${exam.session ? ` · ${exam.session}` : ""}`,
       // 학생 화면과 인쇄물에는 이 이름만 나간다. 대학·학년도는 선생님 화면에만.
       paperName: paperName || null,
-      questions: copied,
+      questions,
       assignedBy: auth.user.uid,
       dueAt: dueAt ? Timestamp.fromDate(new Date(`${dueAt}T23:59:59+09:00`)) : null,
       status: "assigned",
@@ -119,7 +134,7 @@ export async function POST(request: Request) {
       createdAt: FieldValue.serverTimestamp(),
     });
 
-    for (const question of copied) {
+    for (const question of questions) {
       batch.set(answers().doc(), {
         assignmentId: ref.id,
         questionId: question.questionId,
