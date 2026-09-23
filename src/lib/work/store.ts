@@ -66,6 +66,7 @@ export function toAnswer(snap: DocumentSnapshot): Answer {
     text: data.text ?? "",
     charCount: data.charCount ?? 0,
     charCountNoSpace: data.charCountNoSpace ?? 0,
+    literal: data.literal === true,
     status: data.status ?? "draft",
     updatedAt: toIso(data.updatedAt),
     submittedAt: toIso(data.submittedAt),

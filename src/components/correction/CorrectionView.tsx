@@ -23,11 +23,14 @@ import { SEVERITY_LABEL, totalScore, type Correction } from "@/lib/types/work";
 export function CorrectionView({
   correction,
   answerText,
+  literal = false,
   lengthRule,
   label,
 }: {
   correction: Correction;
   answerText: string;
+  /** 학생 원고지를 칸 그대로 옮긴 답안 */
+  literal?: boolean;
   lengthRule: LengthRule | null;
   label?: string;
 }) {
@@ -61,7 +64,10 @@ export function CorrectionView({
   const activeComment = shown.find((comment) => comment.index === active) ?? null;
   const activeIndex = activeComment?.index ?? null;
 
-  const layout = useMemo(() => layoutManuscript(answerText, DEFAULT_SPEC), [answerText]);
+  const layout = useMemo(
+    () => layoutManuscript(answerText, DEFAULT_SPEC, { literal }),
+    [answerText, literal],
+  );
   const rows = useMemo(() => {
     const planned = lengthRule
       ? planRows(DEFAULT_SPEC, lengthRule)

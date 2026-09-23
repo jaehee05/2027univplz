@@ -116,6 +116,7 @@ function CorrectionSet({
           <div className="mt-1">
             <PrintSheet
               text={text}
+              literal={answer?.literal ?? false}
               lengthRule={lengthRuleOf(question)}
               label={`문제 ${question.number}`}
               comments={correction.inlineComments}

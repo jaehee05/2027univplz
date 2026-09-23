@@ -87,6 +87,11 @@ export interface Answer {
   text: string;
   charCount: number;
   charCountNoSpace: number;
+  /**
+   * 옮겨 쓰기 — 선생님이 학생 원고지를 칸 그대로 옮겨 넣은 답안.
+   * 원고지 규칙을 대신 지켜 주지 않고, 어긴 자리를 첨삭에서 짚는다(`layoutManuscript` 의 literal).
+   */
+  literal: boolean;
   status: "draft" | "submitted";
   updatedAt: string | null;
   submittedAt: string | null;

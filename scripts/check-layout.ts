@@ -1,5 +1,5 @@
-import { layoutManuscript } from "@/lib/manuscript/layout";
-import { checkManuscript } from "@/lib/manuscript/rules";
+import { fromLiteral, layoutManuscript, toLiteral } from "@/lib/manuscript/layout";
+import { checkLiteral, checkManuscript } from "@/lib/manuscript/rules";
 import { DEFAULT_SPEC, lengthRange, rowCapacity, type LengthRule } from "@/lib/manuscript/spec";
 
 function render(text: string, spec = DEFAULT_SPEC) {
@@ -161,6 +161,59 @@ console.log("\n=== 10. 분량 허용 범위 ===");
       `${range.min}~${range.max}자`,
     );
   }
+}
+
+console.log("\n=== 11. 옮겨 쓰기 — 친 그대로 칸에 넣고 어긴 자리를 찾는다 ===");
+{
+  const literal = (text: string) => layoutManuscript(text, DEFAULT_SPEC, { literal: true });
+  const rulesOf = (text: string) => checkLiteral(literal(text)).map((issue) => issue.rule);
+
+  check("바르게 쓴 글은 위반 없음", rulesOf(" 첫 문단이다.둘째 문장이다.\n 둘째 문단.").length === 0,
+    rulesOf(" 첫 문단이다.둘째 문장이다.\n 둘째 문단.").join(","));
+  check("문단 첫 칸 안 비움", rulesOf("들여쓰기 없이.").join() === "MISSING_INDENT");
+  const missing = checkLiteral(literal("들여쓰기 없이."))[0];
+  check("  첫 어절을 짚는다", missing.start === 0 && missing.end === 4, `${missing.start}~${missing.end}`);
+  check("두 칸 들여씀", rulesOf("  두 칸.").join() === "EXTRA_INDENT");
+  check("마침표 뒤 빈칸", rulesOf(" 가나. 다라.").join() === "BLANK_AFTER_PUNCT");
+
+  // 첫 줄 35칸: 들여쓰기 1 + 34자로 꽉 채운다
+  const full = " " + "가".repeat(34);
+  const blank = literal(full + " 나");
+  check("줄 첫 칸 빈칸은 칸을 쓴다", blank.cells.find((c) => c.row === 1 && c.col === 0)?.kind === "space");
+  check("  위반으로 잡힌다", rulesOf(full + " 나").join() === "BLANK_AT_LINE_START");
+
+  const wrapped = literal(full + ".");
+  check("꽉 차 넘어간 마침표는 앞 칸에 함께", wrapped.cells.at(-1)?.appended === "." && rulesOf(full + ".").length === 0);
+  const forced = literal(full + "|.");
+  check("| 뒤 마침표는 줄 첫 칸에", forced.cells.at(-1)?.row === 1 && forced.cells.at(-1)?.text === ".");
+  check("  위반으로 잡힌다", rulesOf(full + "|.").join() === "PUNCT_AT_LINE_START");
+
+  const bracket = " " + "가".repeat(33) + "(나)";
+  check("줄 끝 여는 괄호는 내리지 않는다", literal(bracket).cells.find((c) => c.text === "(")?.row === 0);
+  check("  위반으로 잡힌다", rulesOf(bracket).join() === "BRACKET_AT_LINE_END");
+  check("| 로 내리면 위반 아님", rulesOf(" " + "가".repeat(33) + "|(나)").length === 0);
+
+  const manualIssues = checkManuscript("들여쓰기 없이.", literal("들여쓰기 없이."), null, { literal: true });
+  check("checkManuscript 도 옮겨 쓰기 규칙을 쓴다", manualIssues.some((i) => i.rule === "MISSING_INDENT"));
+}
+
+console.log("\n=== 12. 자동 배치 글 ↔ 옮겨 쓰기 글 — 원고지 모양이 같다 ===");
+{
+  const shape = (cells: { row: number; col: number; text: string; appended: string }[]) =>
+    cells.map((c) => `${c.row}:${c.col}:${c.text}${c.appended}`).join(" ");
+  const samples = [
+    "첫 문단입니다. 그리고 둘째 문장, 셋째.\n둘째 문단은 0.5와 3.75를 씁니다!  끝",
+    "가".repeat(34) + " 나",
+    "가".repeat(34) + "." + "다",
+    "가".repeat(33) + "(나)라",
+  ];
+  for (const text of samples) {
+    const auto = layoutManuscript(text, DEFAULT_SPEC);
+    const literalText = toLiteral(text, DEFAULT_SPEC);
+    const literal = layoutManuscript(literalText, DEFAULT_SPEC, { literal: true });
+    check(`모양 같음: ${text.slice(0, 12)}…`, shape(auto.cells) === shape(literal.cells), JSON.stringify(literalText.slice(0, 50)));
+  }
+  check("되돌리기", fromLiteral(" 가나.다\n 라|(마)") === "가나.다\n라(마)");
 }
 
 console.log(failures === 0 ? "\n전부 통과" : `\n${failures}건 실패`);

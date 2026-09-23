@@ -76,6 +76,6 @@
 
 ---
 
-## 학생 답안 ({{charCount}}자, 공백 제외 {{charCountNoSpace}}자)
+{{manuscript}}## 학생 답안 ({{charCount}}자, 공백 제외 {{charCountNoSpace}}자)
 
 {{answer}}

@@ -20,12 +20,37 @@ export type LayoutNoteKind =
   | "SPACE_AT_LINE_START"
   | "SPACE_AFTER_PUNCT"
   | "BRACKET_PUSHED"
-  | "INDENT_INSERTED";
+  | "INDENT_INSERTED"
+  // 옮겨 쓰기(literal)에서 학생이 어긴 원고지 사용법
+  | "MISSING_INDENT"
+  | "EXTRA_INDENT"
+  | "BLANK_AT_LINE_START"
+  | "BLANK_AFTER_PUNCT"
+  | "PUNCT_AT_LINE_START"
+  | "BRACKET_AT_LINE_END";
 
 export interface LayoutNote {
   kind: LayoutNoteKind;
   offset: number;
+  /** 어긴 자리가 차지하는 원문 범위의 끝. 없으면 한 글자 */
+  end?: number;
 }
+
+export interface LayoutOptions {
+  /**
+   * 옮겨 쓰기 — 선생님이 학생 원고지를 칸 그대로 옮길 때 쓴다.
+   * 규칙을 대신 지켜 주지 않고 친 그대로 칸에 넣은 뒤, 어긴 자리를 notes 에 남긴다.
+   *  · 문단 첫 칸은 친 공백만큼 비운다 (자동으로 비우지 않음)
+   *  · 공백은 어디서든 한 칸 — 줄 첫 칸이든 마침표 뒤든
+   *  · `|` 는 학생이 줄을 바꾼 자리. 그 뒤 줄 첫 칸의 문장부호는 제 칸에 들어간다
+   *    (`|` 없이 줄이 꽉 차 넘어간 문장부호는 학생이 앞 칸에 함께 쓴 것으로 본다)
+   *  · 여는 괄호가 줄 마지막 칸에 와도 내리지 않는다
+   */
+  literal?: boolean;
+}
+
+/** 옮겨 쓰기에서 학생이 줄을 바꾼 자리 */
+export const LINE_BREAK_MARK = "|";
 
 export interface LayoutResult {
   cells: Cell[];
@@ -66,13 +91,13 @@ interface Token {
   text: string;
   start: number;
   end: number;
-  kind: "text" | "space" | "break";
+  kind: "text" | "space" | "break" | "linebreak";
   /** 소수 조각. ".5"처럼 점으로 시작해도 문장부호가 아니다. */
   numeric?: boolean;
 }
 
 /** 원문을 칸 단위 토큰으로 나눈다. 숫자·영문은 한 칸에 두 자씩 묶는다. */
-function tokenize(source: string): Token[] {
+function tokenize(source: string, literal: boolean): Token[] {
   const tokens: Token[] = [];
   let i = 0;
 
@@ -81,6 +106,11 @@ function tokenize(source: string): Token[] {
 
     if (ch === "\n") {
       tokens.push({ text: "\n", start: i, end: i + 1, kind: "break" });
+      i += 1;
+      continue;
+    }
+    if (literal && ch === LINE_BREAK_MARK) {
+      tokens.push({ text: ch, start: i, end: i + 1, kind: "linebreak" });
       i += 1;
       continue;
     }
@@ -128,13 +158,22 @@ function tokenize(source: string): Token[] {
  *  · 숫자·영문은 한 칸에 두 자
  *  · 소수는 소수점까지 뒤에서부터 두 자씩 (0.5 → 0|.5, 3.75 → 3.|75)
  */
-export function layoutManuscript(source: string, spec: ManuscriptSpec): LayoutResult {
+export function layoutManuscript(
+  source: string,
+  spec: ManuscriptSpec,
+  options: LayoutOptions = {},
+): LayoutResult {
+  const literal = options.literal ?? false;
   const cells: Cell[] = [];
   const notes: LayoutNote[] = [];
 
   let row = 0;
   let col = 0;
   let atParagraphStart = true;
+  /** 옮겨 쓰기: 문단 머리에서 비운 칸 수. 글자가 나오면 null */
+  let leading: number | null = null;
+  /** 옮겨 쓰기: 이 줄은 학생이 `|` 로 바꾼 줄이다 */
+  let forcedBreak = false;
 
   const width = () => rowCapacity(spec, row);
 
@@ -148,10 +187,11 @@ export function layoutManuscript(source: string, spec: ManuscriptSpec): LayoutRe
 
   const push = (kind: CellKind, text: string, start: number, end: number) => {
     cells.push({ row, col, text, appended: "", start, end, kind });
+    forcedBreak = false;
     advance();
   };
 
-  for (const token of tokenize(source)) {
+  for (const token of tokenize(source, literal)) {
     if (token.kind === "break") {
       // 줄바꿈 = 문단 나눔. 쓰던 줄을 접고 다음 줄로 간다.
       if (col !== 0) {
@@ -159,6 +199,12 @@ export function layoutManuscript(source: string, spec: ManuscriptSpec): LayoutRe
         col = 0;
       }
       atParagraphStart = true;
+      forcedBreak = false;
+      continue;
+    }
+
+    if (literal) {
+      layoutLiteralToken(token);
       continue;
     }
 
@@ -204,6 +250,66 @@ export function layoutManuscript(source: string, spec: ManuscriptSpec): LayoutRe
     push("text", token.text, token.start, token.end);
   }
 
+  /** 옮겨 쓰기 — 친 그대로 칸에 넣고, 어긴 자리를 적어 둔다. */
+  function layoutLiteralToken(token: Token) {
+    if (token.kind === "linebreak") {
+      if (col !== 0) {
+        row += 1;
+        col = 0;
+      }
+      forcedBreak = true;
+      return;
+    }
+
+    if (atParagraphStart) {
+      atParagraphStart = false;
+      leading = 0;
+    }
+
+    if (token.kind === "space") {
+      if (leading != null) {
+        leading += 1;
+        if (leading === 2) notes.push({ kind: "EXTRA_INDENT", offset: token.start });
+      } else if (col === 0) {
+        notes.push({ kind: "BLANK_AT_LINE_START", offset: token.start });
+      } else {
+        const previous = cells[cells.length - 1];
+        const tail = previous ? (previous.appended || previous.text).slice(-1) : "";
+        if (previous && previous.kind === "text" && NO_SPACE_AFTER.has(tail)) {
+          notes.push({ kind: "BLANK_AFTER_PUNCT", offset: token.start });
+        }
+      }
+      push(leading != null && leading === 1 ? "indent" : "space", "", token.start, token.end);
+      return;
+    }
+
+    if (leading === 0) {
+      // 첫 어절을 짚는다
+      let end = token.end;
+      while (end < source.length && !/\s/.test(source[end])) end += 1;
+      notes.push({ kind: "MISSING_INDENT", offset: token.start, end });
+    }
+    leading = null;
+
+    const head = token.text[0];
+    if (col === 0 && !token.numeric && LEADING_FORBIDDEN.has(head) && cells.length > 0) {
+      if (!forcedBreak) {
+        // 줄이 꽉 차 넘어온 문장부호 — 학생이 앞 칸에 함께 쓴 것으로 본다.
+        const previous = cells[cells.length - 1];
+        previous.appended += token.text;
+        previous.end = token.end;
+        return;
+      }
+      notes.push({ kind: "PUNCT_AT_LINE_START", offset: token.start });
+    }
+
+    if (col === width() - 1 && TRAILING_FORBIDDEN.has(head)) {
+      notes.push({ kind: "BRACKET_AT_LINE_END", offset: token.start });
+    }
+
+    push("text", token.text, token.start, token.end);
+  }
+
   const countWithSpace = cells.length;
   const countWithoutSpace = cells.filter((cell) => cell.kind === "text").length;
   const usedRows = cells.length === 0 ? 0 : cells[cells.length - 1].row + 1;
@@ -220,4 +326,36 @@ export function cellAtOffset(cells: Cell[], offset: number): Cell | null {
   return cells.length > 0 && offset >= cells[cells.length - 1].end
     ? cells[cells.length - 1]
     : null;
+}
+
+/**
+ * 자동 배치로 쓴 글을 옮겨 쓰기 글로 바꾼다. 원고지 모양은 그대로다.
+ * 자동으로 비운 문단 첫 칸은 공백으로, 내린 괄호 앞에는 줄바꿈 표시를 넣고,
+ * 칸을 쓰지 않은 공백은 지운다.
+ */
+export function toLiteral(source: string, spec: ManuscriptSpec): string {
+  const { notes } = layoutManuscript(source, spec);
+  const insert = new Map<number, string>();
+  const drop = new Set<number>();
+  for (const note of notes) {
+    if (note.kind === "INDENT_INSERTED") insert.set(note.offset, " ");
+    if (note.kind === "BRACKET_PUSHED") insert.set(note.offset, LINE_BREAK_MARK);
+    if (note.kind === "SPACE_AT_LINE_START" || note.kind === "SPACE_AFTER_PUNCT") drop.add(note.offset);
+  }
+  let out = "";
+  for (let i = 0; i <= source.length; i += 1) {
+    out += insert.get(i) ?? "";
+    if (i < source.length && !drop.has(i)) out += source[i];
+  }
+  return out;
+}
+
+/** 옮겨 쓰기 글을 자동 배치 글로 되돌린다 — 줄바꿈 표시와 문단 첫 공백 한 칸을 뺀다. */
+export function fromLiteral(source: string): string {
+  return source
+    .split(LINE_BREAK_MARK)
+    .join("")
+    .split("\n")
+    .map((line) => line.replace(/^[ \t　]/, ""))
+    .join("\n");
 }

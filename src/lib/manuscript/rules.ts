@@ -1,4 +1,4 @@
-import type { LayoutResult } from "@/lib/manuscript/layout";
+import type { LayoutNoteKind, LayoutResult } from "@/lib/manuscript/layout";
 import { lengthRange, type LengthRule } from "@/lib/manuscript/spec";
 
 export type RuleId =
@@ -11,7 +11,49 @@ export type RuleId =
   | "AUTO_PUNCT_WRAPPED"
   | "AUTO_SPACE_DROPPED"
   | "AUTO_SPACE_AFTER_PUNCT"
-  | "AUTO_BRACKET_PUSHED";
+  | "AUTO_BRACKET_PUSHED"
+  | LiteralRuleId;
+
+/** 옮겨 쓰기에서 학생이 어긴 원고지 사용법. 첨삭에 `원고지` 코멘트로 그대로 붙는다. */
+export type LiteralRuleId =
+  | "MISSING_INDENT"
+  | "EXTRA_INDENT"
+  | "BLANK_AT_LINE_START"
+  | "BLANK_AFTER_PUNCT"
+  | "PUNCT_AT_LINE_START"
+  | "BRACKET_AT_LINE_END";
+
+export const LITERAL_RULE_MESSAGE: Record<LiteralRuleId, { message: string; suggestion: string }> = {
+  MISSING_INDENT: {
+    message: "문단 첫 칸을 비우지 않았습니다.",
+    suggestion: "새 문단은 첫 칸을 한 칸 비우고 둘째 칸부터 쓰세요.",
+  },
+  EXTRA_INDENT: {
+    message: "문단 첫머리를 두 칸 이상 비웠습니다.",
+    suggestion: "문단 첫머리는 한 칸만 비우세요.",
+  },
+  BLANK_AT_LINE_START: {
+    message: "줄 첫 칸을 비웠습니다.",
+    suggestion: "띄어 쓸 자리가 줄 끝에 걸리면 다음 줄은 첫 칸부터 바로 쓰세요.",
+  },
+  BLANK_AFTER_PUNCT: {
+    message: "마침표·쉼표 뒤에 칸을 비웠습니다.",
+    suggestion: "마침표·쉼표는 한 칸을 차지하므로 다음 글자는 바로 다음 칸에 쓰세요.",
+  },
+  PUNCT_AT_LINE_START: {
+    message: "문장부호를 줄 첫 칸에 썼습니다.",
+    suggestion: "줄 끝에 걸린 문장부호는 앞 줄 마지막 칸에 글자와 함께 쓰세요.",
+  },
+  BRACKET_AT_LINE_END: {
+    message: "여는 괄호·따옴표를 줄 마지막 칸에 썼습니다.",
+    suggestion: "여는 괄호·따옴표가 줄 끝에 걸리면 그 칸을 비우고 다음 줄 첫 칸에 쓰세요.",
+  },
+};
+
+const LITERAL_RULES = new Set<LayoutNoteKind>(Object.keys(LITERAL_RULE_MESSAGE) as LiteralRuleId[]);
+
+export const isLiteralRule = (rule: RuleId): rule is LiteralRuleId =>
+  LITERAL_RULES.has(rule as LayoutNoteKind);
 
 export type Severity = "error" | "warning" | "info";
 
@@ -58,13 +100,14 @@ function checkLength(layout: LayoutResult, rule: LengthRule | null): RuleIssue[]
   return [];
 }
 
-function checkText(source: string): RuleIssue[] {
+function checkText(source: string, literal: boolean): RuleIssue[] {
   const issues: RuleIssue[] = [];
 
   // 문단 앞 수동 들여쓰기 — 첫 칸은 자동으로 비우므로 공백을 직접 넣으면 두 칸이 빈다.
+  // 옮겨 쓰기에서는 공백이 곧 비운 칸이라 따로 본다(checkLiteral).
   const paragraphStart = /(^|\n)([ \t　]+)/g;
   let match: RegExpExecArray | null;
-  while ((match = paragraphStart.exec(source)) !== null) {
+  while (!literal && (match = paragraphStart.exec(source)) !== null) {
     const start = match.index + match[1].length;
     issues.push({
       rule: "INDENT_MANUAL",
@@ -78,6 +121,7 @@ function checkText(source: string): RuleIssue[] {
   // 연속 띄어쓰기
   const doubleSpace = /[ 　]{2,}/g;
   while ((match = doubleSpace.exec(source)) !== null) {
+    if (literal && (match.index === 0 || source[match.index - 1] === "\n")) continue;
     issues.push({
       rule: "SPACE_DOUBLE",
       severity: "warning",
@@ -136,6 +180,19 @@ function checkText(source: string): RuleIssue[] {
   return issues;
 }
 
+/** 옮겨 쓰기에서 학생이 어긴 자리 */
+export function checkLiteral(layout: LayoutResult): RuleIssue[] {
+  return layout.notes
+    .filter((note) => LITERAL_RULES.has(note.kind))
+    .map((note) => ({
+      rule: note.kind as LiteralRuleId,
+      severity: "warning" as const,
+      message: LITERAL_RULE_MESSAGE[note.kind as LiteralRuleId].message,
+      start: note.offset,
+      end: note.end ?? note.offset + 1,
+    }));
+}
+
 /** 배치 과정에서 자동으로 손본 내용 — 고칠 필요는 없고 알려만 준다. */
 function collectAutoNotes(layout: LayoutResult): RuleIssue[] {
   const byKind = {
@@ -192,10 +249,12 @@ export function checkManuscript(
   source: string,
   layout: LayoutResult,
   lengthRule: LengthRule | null,
+  options: { literal?: boolean } = {},
 ): RuleIssue[] {
+  const literal = options.literal ?? false;
   return [
     ...checkLength(layout, lengthRule),
-    ...checkText(source),
-    ...collectAutoNotes(layout),
+    ...checkText(source, literal),
+    ...(literal ? checkLiteral(layout) : collectAutoNotes(layout)),
   ].sort((a, b) => a.start - b.start);
 }

@@ -37,6 +37,7 @@ export default async function CorrectionPage({
     number: row.question.number,
     lengthRule: lengthRuleOf(row.question),
     answerText: row.answer?.text ?? "",
+    literal: row.answer?.literal ?? false,
     correction: row.correction,
   }));
 

@@ -43,6 +43,7 @@ export default async function PrintAnswerPage({
 
           <PrintSheet
             text={answer?.text ?? ""}
+            literal={answer?.literal ?? false}
             lengthRule={lengthRuleOf(question)}
             label={`문제 ${question.number}`}
           />

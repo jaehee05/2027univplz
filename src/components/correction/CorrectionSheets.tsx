@@ -11,6 +11,8 @@ export interface SheetRow {
   number: string;
   lengthRule: LengthRule | null;
   answerText: string;
+  /** 학생 원고지를 칸 그대로 옮긴 답안 */
+  literal: boolean;
   correction: Correction | null;
 }
 
@@ -59,6 +61,7 @@ export function CorrectionSheets({ rows }: { rows: SheetRow[] }) {
           key={current.questionId}
           correction={current.correction}
           answerText={current.answerText}
+          literal={current.literal}
           lengthRule={current.lengthRule}
           label={`문제 ${current.number}`}
         />

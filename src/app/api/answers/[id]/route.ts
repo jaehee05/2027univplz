@@ -10,6 +10,8 @@ const bodySchema = z.object({
   text: z.string().max(20000),
   charCount: z.number().int().min(0),
   charCountNoSpace: z.number().int().min(0),
+  /** 옮겨 쓰기 — 선생님만 켤 수 있다 */
+  literal: z.boolean().optional(),
 });
 
 /** 자동 저장. 제출한 뒤에는 학생이 고칠 수 없다. */
@@ -36,7 +38,16 @@ export async function PUT(request: Request, ctx: Ctx) {
     return Response.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
 
-  await answerRef(id).update({ ...parsed.data, updatedAt: FieldValue.serverTimestamp() });
+  const { literal, ...rest } = parsed.data;
+  if (literal !== undefined && auth.user.role !== "teacher") {
+    return Response.json({ error: "옮겨 쓰기는 선생님만 쓸 수 있습니다." }, { status: 403 });
+  }
+
+  await answerRef(id).update({
+    ...rest,
+    ...(literal !== undefined ? { literal } : {}),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
   // 어느 문항이든 처음 글자를 넣은 순간 시험지 상태를 '쓰는 중' 으로 옮긴다.
   const assignmentSnap = await assignmentRef(answer.assignmentId).get();

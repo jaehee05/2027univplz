@@ -52,6 +52,7 @@ export default async function ResultPage({ params }: PageProps<"/results/[assign
     number: row.question.number,
     lengthRule: lengthRuleOf(row.question),
     answerText: row.answer?.text ?? "",
+    literal: row.answer?.literal ?? false,
     correction: row.correction,
   }));
 

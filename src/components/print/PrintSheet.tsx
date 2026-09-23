@@ -19,12 +19,15 @@ const LANDSCAPE_CELL = 25;
 
 export function PrintSheet({
   text = "",
+  literal = false,
   lengthRule,
   label,
   comments = [],
   orientation = "landscape",
 }: {
   text?: string;
+  /** 학생 원고지를 칸 그대로 옮긴 답안 */
+  literal?: boolean;
   lengthRule: LengthRule | null;
   label?: string;
   comments?: InlineComment[];
@@ -33,7 +36,7 @@ export function PrintSheet({
   // 화면과 같은 번호를 종이에도 붙인다 — 답안 순서대로 1번부터.
   const marks = useMemo(() => numbered(comments, text), [comments, text]);
 
-  const layout = useMemo(() => layoutManuscript(text, DEFAULT_SPEC), [text]);
+  const layout = useMemo(() => layoutManuscript(text, DEFAULT_SPEC, { literal }), [text, literal]);
   const rows = useMemo(() => {
     const planned = lengthRule
       ? planRows(DEFAULT_SPEC, lengthRule)

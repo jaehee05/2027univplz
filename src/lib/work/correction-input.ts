@@ -85,6 +85,7 @@ export async function loadCorrectionInput(
       answer: answer.text,
       charCount: answer.charCount,
       charCountNoSpace: answer.charCountNoSpace,
+      literal: answer.literal,
     },
   };
 }

@@ -20,6 +20,8 @@ interface ManuscriptEditorProps {
   lengthRule: LengthRule | null;
   label?: string;
   readOnly?: boolean;
+  /** 옮겨 쓰기 — 친 그대로 칸에 넣고 원고지 사용법 위반을 짚는다 */
+  literal?: boolean;
 }
 
 const SEVERITY_STYLE: Record<RuleIssue["severity"], string> = {
@@ -35,6 +37,7 @@ export function ManuscriptEditor({
   lengthRule,
   label,
   readOnly = false,
+  literal = false,
 }: ManuscriptEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -42,10 +45,10 @@ export function ManuscriptEditor({
   const [pendingCaret, setPendingCaret] = useState<number | null>(null);
   const cellSize = useFittedCellSize(frameRef, spec.cols);
 
-  const layout = useMemo(() => layoutManuscript(value, spec), [value, spec]);
+  const layout = useMemo(() => layoutManuscript(value, spec, { literal }), [value, spec, literal]);
   const issues = useMemo(
-    () => checkManuscript(value, layout, lengthRule),
-    [value, layout, lengthRule],
+    () => checkManuscript(value, layout, lengthRule, { literal }),
+    [value, layout, lengthRule, literal],
   );
   const range = lengthRule ? lengthRange(lengthRule) : null;
   // 분량 경고는 글 끝 글자에 괄호를 쳐 봐야 무슨 뜻인지 모른다 — 칸 수 표시와 아래 목록으로 알린다.
@@ -139,7 +142,11 @@ export function ManuscriptEditor({
             rows={6}
             spellCheck={false}
             className="w-full resize-y rounded-md border border-neutral-300 p-3 font-sans text-base leading-7"
-            placeholder="답안을 입력하세요. 줄바꿈은 문단 나눔으로 처리되고, 문단 첫 칸은 자동으로 비웁니다."
+            placeholder={
+              literal
+                ? "원고지 칸 그대로 입력하세요. 공백 하나가 빈 칸 하나, 줄바꿈은 문단 나눔, | 는 줄만 바꿉니다."
+                : "답안을 입력하세요. 줄바꿈은 문단 나눔으로 처리되고, 문단 첫 칸은 자동으로 비웁니다."
+            }
           />
         </label>
       )}

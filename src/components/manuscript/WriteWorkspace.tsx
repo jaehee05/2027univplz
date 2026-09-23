@@ -19,8 +19,11 @@ export function WriteWorkspace({
   answers,
   paper,
   passages,
+  canTranscribe = false,
 }: {
   assignment: Assignment;
+  /** 선생님 — 학생 원고지를 칸 그대로 옮겨 넣을 수 있다 */
+  canTranscribe?: boolean;
   answers: Answer[];
   paper: { hasPdf: boolean; pageFrom: number | null; pageTo: number | null; version: string };
   passages: Passage[];
@@ -81,6 +84,7 @@ export function WriteWorkspace({
           <AnswerWriter
             assignment={assignment}
             initial={answers}
+            canTranscribe={canTranscribe}
             onQuestionChange={setActiveId}
           />
         </div>

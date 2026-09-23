@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ManuscriptEditor } from "@/components/manuscript/ManuscriptEditor";
-import { layoutManuscript } from "@/lib/manuscript/layout";
+import { fromLiteral, layoutManuscript, toLiteral } from "@/lib/manuscript/layout";
 import { DEFAULT_SPEC, type LengthRule } from "@/lib/manuscript/spec";
 import type { Answer, Assignment, AssignmentQuestion } from "@/lib/types/work";
 
@@ -18,7 +18,13 @@ interface Draft {
   savedText: string;
   savedAt: string | null;
   locked: boolean;
+  /** 옮겨 쓰기 — 학생 원고지를 칸 그대로 옮긴다 */
+  literal: boolean;
+  savedLiteral: boolean;
 }
+
+const isDirty = (draft: Draft) =>
+  draft.text !== draft.savedText || draft.literal !== draft.savedLiteral;
 
 function lengthRuleOf(question: AssignmentQuestion): LengthRule | null {
   return question.charTarget
@@ -31,16 +37,19 @@ function lengthRuleOf(question: AssignmentQuestion): LengthRule | null {
     : null;
 }
 
-function countOf(text: string): number {
-  return layoutManuscript(text, DEFAULT_SPEC).countWithSpace;
+function countOf(draft: Pick<Draft, "text" | "literal">): number {
+  return layoutManuscript(draft.text, DEFAULT_SPEC, { literal: draft.literal }).countWithSpace;
 }
 
 export function AnswerWriter({
   assignment,
   initial,
+  canTranscribe = false,
   onQuestionChange,
 }: {
   assignment: Assignment;
+  /** 선생님 — 옮겨 쓰기를 켤 수 있다 */
+  canTranscribe?: boolean;
   /** 문항 차례대로. 과제를 낼 때 문항마다 하나씩 만들어 둔다. */
   initial: Answer[];
   /** 왼쪽 문제지 칸이 같은 문항을 비추게 한다 */
@@ -57,6 +66,8 @@ export function AnswerWriter({
         savedText: answer?.text ?? "",
         savedAt: answer?.updatedAt ?? null,
         locked: answer?.status === "submitted",
+        literal: answer?.literal ?? false,
+        savedLiteral: answer?.literal ?? false,
       };
     }),
   );
@@ -68,11 +79,11 @@ export function AnswerWriter({
 
   const current = drafts[at];
   const allLocked = drafts.every((draft) => draft.locked);
-  const dirty = drafts.some((draft) => draft.text !== draft.savedText);
+  const dirty = drafts.some(isDirty);
   const unwritten = drafts.filter((draft) => draft.text.trim().length === 0);
 
-  const save = useCallback(async (draft: Draft, value: string) => {
-    const layout = layoutManuscript(value, DEFAULT_SPEC);
+  const save = useCallback(async (draft: Draft, value: string, literal: boolean) => {
+    const layout = layoutManuscript(value, DEFAULT_SPEC, { literal });
     setSaving(true);
     try {
       const response = await fetch(`/api/answers/${draft.answerId}`, {
@@ -82,6 +93,8 @@ export function AnswerWriter({
           text: value,
           charCount: layout.countWithSpace,
           charCountNoSpace: layout.countWithoutSpace,
+          // 학생은 이 값을 보낼 수 없다 — 선생님 화면에서만 싣는다.
+          ...(canTranscribe ? { literal } : {}),
         }),
       });
       const data = await response.json();
@@ -89,7 +102,7 @@ export function AnswerWriter({
       setDrafts((prev) =>
         prev.map((row) =>
           row.answerId === draft.answerId
-            ? { ...row, savedText: value, savedAt: data.savedAt }
+            ? { ...row, savedText: value, savedLiteral: literal, savedAt: data.savedAt }
             : row,
         ),
       );
@@ -99,15 +112,14 @@ export function AnswerWriter({
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [canTranscribe]);
 
   // 글을 멈추면 잠시 뒤 자동 저장한다. 보고 있는 문항만.
   useEffect(() => {
-    if (!current || current.locked || current.text === current.savedText) return;
+    if (!current || current.locked || !isDirty(current)) return;
     if (timer.current) clearTimeout(timer.current);
     const draft = current;
-    const value = current.text;
-    timer.current = setTimeout(() => void save(draft, value), SAVE_DELAY);
+    timer.current = setTimeout(() => void save(draft, draft.text, draft.literal), SAVE_DELAY);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
@@ -141,7 +153,7 @@ export function AnswerWriter({
     }
 
     const lines = drafts.map(
-      (draft) => `  ${draft.question.number}번 ${countOf(draft.text)}자`,
+      (draft) => `  ${draft.question.number}번 ${countOf(draft)}자`,
     );
     if (
       !confirm(
@@ -157,7 +169,7 @@ export function AnswerWriter({
     try {
       // 안 넘어간 글자가 남지 않게 먼저 모두 저장한다.
       for (const draft of drafts) {
-        if (draft.text !== draft.savedText) await save(draft, draft.text);
+        if (isDirty(draft)) await save(draft, draft.text, draft.literal);
       }
       const response = await fetch(`/api/assignments/${assignment.id}/submit`, { method: "POST" });
       const data = await response.json();
@@ -180,7 +192,7 @@ export function AnswerWriter({
       {drafts.length > 1 ? (
         <div className="mb-3 flex flex-wrap gap-2">
           {drafts.map((draft, index) => {
-            const count = countOf(draft.text);
+            const count = countOf(draft);
             return (
               <button
                 key={draft.question.questionId}
@@ -203,8 +215,42 @@ export function AnswerWriter({
         </div>
       ) : null}
 
+      {canTranscribe && !current.locked ? (
+        <label className="mb-3 flex items-start gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={current.literal}
+            onChange={(event) => {
+              const literal = event.target.checked;
+              // 켜고 끌 때 원고지 모양이 그대로 남도록 글을 바꿔 준다.
+              setDrafts((prev) =>
+                prev.map((row, i) =>
+                  i === at
+                    ? {
+                        ...row,
+                        literal,
+                        text: literal ? toLiteral(row.text, DEFAULT_SPEC) : fromLiteral(row.text),
+                      }
+                    : row,
+                ),
+              );
+            }}
+          />
+          <span>
+            <span className="font-medium">학생 원고지 그대로 옮기기</span>
+            <span className="block text-neutral-500">
+              원고지 규칙을 대신 지켜 주지 않고 친 그대로 칸에 넣습니다. 공백 하나가 빈 칸 하나 —
+              문단 첫 칸도 공백으로 비웁니다. 학생이 줄을 바꾼 자리는 <code>|</code> 로 적습니다.
+              어긴 자리는 첨삭에 <b>원고지</b> 코멘트로 붙습니다.
+            </span>
+          </span>
+        </label>
+      ) : null}
+
       <ManuscriptEditor
         key={current.question.questionId}
+        literal={current.literal}
         value={current.text}
         onChange={(value) =>
           setDrafts((prev) => prev.map((row, i) => (i === at ? { ...row, text: value } : row)))
@@ -221,7 +267,7 @@ export function AnswerWriter({
             "제출을 마쳤습니다. 선생님이 첨삭하면 결과가 보입니다."
           ) : saving ? (
             "저장 중…"
-          ) : current.text !== current.savedText ? (
+          ) : isDirty(current) ? (
             "저장하지 않은 내용이 있습니다"
           ) : current.savedAt ? (
             `저장됨 · ${new Date(current.savedAt).toLocaleTimeString("ko-KR", {

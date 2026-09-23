@@ -333,6 +333,7 @@ export function CorrectionReview({ assignmentId, studentName, initial }: Props) 
             key={current.questionId}
             correction={correction}
             answerText={current.answerText}
+            literal={current.literal}
             lengthRule={current.lengthRule}
             label={`문제 ${current.number}`}
           />

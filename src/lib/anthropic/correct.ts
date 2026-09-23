@@ -6,7 +6,9 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { anthropic, type CallUsage } from "@/lib/anthropic/client";
 import { fillPrompt, loadPrompt } from "@/lib/anthropic/prompts";
 import { serverEnv } from "@/lib/env";
-import { lengthRange } from "@/lib/manuscript/spec";
+import { LINE_BREAK_MARK, layoutManuscript } from "@/lib/manuscript/layout";
+import { checkLiteral, LITERAL_RULE_MESSAGE, type LiteralRuleId } from "@/lib/manuscript/rules";
+import { DEFAULT_SPEC, lengthRange } from "@/lib/manuscript/spec";
 import { rubricFor, type Analysis, type Question, type RubricItem } from "@/lib/types/exam";
 import type { Correction, InlineComment } from "@/lib/types/work";
 import { snapRange } from "@/lib/work/snap";
@@ -173,6 +175,46 @@ export interface CorrectionInput {
   answer: string;
   charCount: number;
   charCountNoSpace: number;
+  /** 선생님이 학생 원고지를 칸 그대로 옮긴 답안 — 원고지 사용법 위반을 짚는다 */
+  literal?: boolean;
+}
+
+/**
+ * 옮겨 쓴 답안에서 원고지 사용법을 어긴 자리.
+ * 모델에게 맡기지 않고 프로그램이 찾아 `원고지` 코멘트로 붙인다 — 칸 배치는 모델이 볼 수 없다.
+ */
+export function manuscriptComments(input: CorrectionInput): InlineComment[] {
+  if (!input.literal) return [];
+  const layout = layoutManuscript(input.answer, DEFAULT_SPEC, { literal: true });
+  return checkLiteral(layout).map((issue) => ({
+    start: issue.start,
+    end: issue.end,
+    severity: "warning",
+    category: "원고지",
+    message: issue.message,
+    suggestion: LITERAL_RULE_MESSAGE[issue.rule as LiteralRuleId].suggestion,
+  }));
+}
+
+/** 프롬프트에 싣는 원고지 사용법 안내. 옮겨 쓴 답안일 때만. */
+function renderManuscript(input: CorrectionInput): string {
+  if (!input.literal) return "";
+  const found = manuscriptComments(input);
+  const tally = new Map<string, number>();
+  for (const comment of found) tally.set(comment.message, (tally.get(comment.message) ?? 0) + 1);
+  const list = found.length
+    ? [...tally].map(([message, count]) => `- ${message} (${count}곳)`).join("\n")
+    : "- (어긴 곳 없음)";
+  return (
+    "## 원고지 사용법\n\n" +
+    "이 답안은 학생이 원고지에 쓴 것을 선생님이 칸 그대로 옮긴 것이다. " +
+    `문단 첫머리의 공백은 학생이 비운 칸이고, \`${LINE_BREAK_MARK}\` 는 학생이 줄을 바꾼 자리다(글자가 아니다).\n` +
+    "프로그램이 원고지 사용법을 어긴 자리를 찾아 아래처럼 정리했고, **이미 `원고지` 코멘트로 달아 두었다.** " +
+    "같은 코멘트를 또 달지 마라. 채점 기준에 원고지 작성법 감점이 있으면 이 목록을 근거로 판단하고, " +
+    "어긴 곳이 있으면 `improvements` 에 한 줄로 짚어라.\n\n" +
+    list +
+    "\n\n---\n\n"
+  );
 }
 
 /** 이 문항을 채점할 때 쓸 기준 항목 */
@@ -239,6 +281,7 @@ export async function buildCorrectionPrompt(
     answer: input.answer,
     charCount: String(input.charCount),
     charCountNoSpace: String(input.charCountNoSpace),
+    manuscript: renderManuscript(input),
   });
 
   if (!options.manual) return prompt;
@@ -292,7 +335,13 @@ export function normalizeCorrection(
 
   return {
     scores: { items, deductions, total: Math.max(0, Math.round(earned - lost)) },
-    inlineComments: resolveQuotes(parsed.inlineComments, input.answer),
+    // 원고지 코멘트는 프로그램이 짚은 자리 그대로 둔다 — 문장 경계로 옮기면 칸을 벗어난다.
+    inlineComments: [
+      ...resolveQuotes(parsed.inlineComments, input.answer).filter(
+        (comment) => !(input.literal && comment.category === "원고지"),
+      ),
+      ...manuscriptComments(input),
+    ].sort((a, b) => a.start - b.start),
     overall: parsed.overall,
     revisedExample: parsed.revisedExample,
   };

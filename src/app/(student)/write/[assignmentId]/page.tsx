@@ -111,6 +111,7 @@ export default async function WritePage({ params }: PageProps<"/write/[assignmen
 
       <WriteWorkspace
         assignment={assignment}
+        canTranscribe={user.role === "teacher"}
         answers={answerRows}
         passages={passages}
         paper={{
