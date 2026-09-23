@@ -38,7 +38,8 @@ export function AnswerProse({
   text: string;
   comments: Numbered[];
   activeIndex: number | null;
-  onSelect: (index: number) => void;
+  /** 없으면(인쇄) 누를 수 없는 형광펜만 칠한다 */
+  onSelect?: (index: number) => void;
 }) {
   const segments = useMemo<Segment[]>(() => {
     // 구간이 겹칠 수 있으므로 경계마다 끊는다.
@@ -83,19 +84,24 @@ export function AnswerProse({
         segment.comment ? (
           <mark
             key={index}
-            role="button"
-            tabIndex={0}
+            role={onSelect ? "button" : undefined}
+            tabIndex={onSelect ? 0 : undefined}
             aria-label={segment.covering.map((c) => `코멘트 ${c.index}번`).join(", ")}
-            onClick={() => onSelect(segment.comment!.index)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onSelect(segment.comment!.index);
-              }
-            }}
+            onClick={onSelect ? () => onSelect(segment.comment!.index) : undefined}
+            onKeyDown={
+              onSelect
+                ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelect(segment.comment!.index);
+                    }
+                  }
+                : undefined
+            }
             className={[
               // relative + box-decoration-clone — 여러 줄에 걸쳐도 조각마다 따로 칠해진다.
-              "relative box-decoration-clone cursor-pointer rounded-[3px] px-[1px] text-inherit",
+              "relative box-decoration-clone rounded-[3px] px-[1px] text-inherit",
+              onSelect ? "cursor-pointer" : "",
               HIGHLIGHT[segment.comment.severity as Severity],
               // 고른 코멘트가 이 조각을 덮고 있으면 — 겹쳐서 색을 뺏겼어도 — 표시한다.
               activeIndex != null && segment.covering.some((c) => c.index === activeIndex)

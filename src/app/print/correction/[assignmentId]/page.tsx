@@ -1,23 +1,19 @@
 import type { Metadata } from "next";
 
-import { markLabel, numbered } from "@/components/correction/tone";
+import { AnswerProse } from "@/components/correction/AnswerProse";
+import { CommentBody } from "@/components/correction/CommentBody";
+import { CARD, numbered, type Severity } from "@/components/correction/tone";
 import { PrintFrame } from "@/components/print/PrintFrame";
-import { PrintSheet } from "@/components/print/PrintSheet";
 import { loadForPrint, type PrintRow } from "@/lib/work/print";
-import { lengthRuleOf } from "@/lib/work/store";
-import { SEVERITY_LABEL, totalScore, type Assignment } from "@/lib/types/work";
+import { totalScore, type Assignment } from "@/lib/types/work";
 import { paperTitleFor } from "@/lib/work/summary";
 
 export const metadata: Metadata = { title: "첨삭 결과지" };
 
-const SEVERITY_MARK: Record<string, string> = {
-  good: "○",
-  info: "·",
-  warning: "△",
-  error: "×",
-};
-
-/** 첨삭지 한 벌 — 문항 하나에 3쪽. */
+/**
+ * 첨삭지 한 벌 — 문항 하나. 세로 A4.
+ * 화면의 '줄글' 보기와 같은 모양이다 — 왼쪽은 형광펜을 칠한 답안, 오른쪽은 코멘트 카드.
+ */
 function CorrectionSet({
   assignment,
   row,
@@ -44,8 +40,7 @@ function CorrectionSet({
 
   return (
     <>
-      {/* ── 1쪽: 점수와 답안 ─────────────────────────────────── */}
-      <section className="print-landscape">
+      <section className="print-page">
         <header className="flex items-end justify-between border-b-2 border-neutral-900 pb-2">
           <div>
             <p className="text-sm">
@@ -79,10 +74,9 @@ function CorrectionSet({
           </p>
         ) : null}
 
-        {/* 채점표를 위로 올린다. 원고지는 38칸 × 26px = 261mm 라 가로 폭을 통째로 써야 안 잘린다. */}
         <div className="mt-2">
           <h2 className="text-sm font-bold">[채점]</h2>
-          <div className="mt-1 grid grid-cols-3 gap-x-6 text-xs">
+          <div className="mt-1 grid grid-cols-2 gap-x-6 text-xs">
             {correction.scores.items.map((item) => (
               <div
                 key={item.id}
@@ -106,54 +100,24 @@ function CorrectionSet({
           </div>
         </div>
 
-        <div className="mt-3">
-          <h2 className="text-sm font-bold">
-            [답안]
-            <span className="ml-2 font-normal text-neutral-500">
-              번호는 뒷장 코멘트와 같습니다
-            </span>
-          </h2>
-          <div className="mt-1">
-            <PrintSheet
-              text={text}
-              literal={answer?.literal ?? false}
-              lengthRule={lengthRuleOf(question)}
-              label={`문제 ${question.number}`}
-              comments={correction.inlineComments}
-            />
+        {/* 답안과 첨삭 — 화면의 줄글 보기처럼 나란히 */}
+        <div className="mt-4 grid grid-cols-[minmax(0,1fr)_68mm] gap-4">
+          <div className="min-w-0 rounded-lg border border-neutral-200 px-3 py-1 text-[10pt]">
+            <AnswerProse text={text} comments={comments} activeIndex={null} />
           </div>
+          <ul className="space-y-1.5 text-[8pt] leading-snug [&_.leading-6]:leading-[1.45]">
+            {comments.map((comment) => (
+              <li
+                key={comment.index}
+                className={`print-block flex gap-1.5 rounded-lg border px-2 py-1.5 ${CARD[comment.severity as Severity]}`}
+              >
+                <CommentBody comment={comment} answerText={text} />
+              </li>
+            ))}
+          </ul>
         </div>
-      </section>
 
-      {/* ── 2쪽: 코멘트 ──────────────────────────────────────── */}
-      <section className="print-landscape">
-        <h2 className="border-b border-neutral-400 pb-1 text-sm font-bold">
-          [코멘트] {question.number}번 · 번호는 앞장 답안에 붙은 번호와 같습니다
-        </h2>
-        <ol className="print-columns mt-2 text-xs">
-          {comments.map((comment) => (
-            <li key={comment.index} className="mb-2 flex gap-1.5 border-b border-neutral-200 pb-1.5">
-              <span className="w-6 shrink-0 text-right font-bold tabular-nums">{markLabel(comment.index)}</span>
-              <span>
-                <span className="font-medium">
-                  {SEVERITY_MARK[comment.severity]} {comment.category} ·{" "}
-                  {SEVERITY_LABEL[comment.severity]}
-                </span>
-                <span className="mt-0.5 block border-l-2 border-neutral-300 pl-1.5 text-neutral-500 italic">
-                  “{text.slice(comment.start, comment.end)}”
-                </span>
-                <span className="mt-0.5 block leading-5">{comment.message}</span>
-                {comment.suggestion ? (
-                  <span className="mt-0.5 block leading-5">→ {comment.suggestion}</span>
-                ) : null}
-              </span>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      {/* ── 3쪽: 총평과 고쳐 쓴 예시 ─────────────────────────── */}
-      <section className="print-landscape">
+        <div className="mt-6">
         <h2 className="border-b border-neutral-400 pb-1 text-sm font-bold">
           [총평] {question.number}번
         </h2>
@@ -198,11 +162,12 @@ function CorrectionSet({
                 {correction.revisedExample.length}자
               </span>
             </h2>
-            <p className="print-columns mt-2 leading-6 break-keep whitespace-pre-wrap">
+            <p className="mt-2 leading-6 break-keep whitespace-pre-wrap">
               {correction.revisedExample}
             </p>
           </div>
         ) : null}
+        </div>
       </section>
     </>
   );
@@ -224,7 +189,6 @@ export default async function PrintCorrectionPage({
     <PrintFrame
       title="첨삭 결과지"
       subtitle={`${assignment.studentName} · ${paperTitleFor(assignment).title} · 문항 ${done.length}개`}
-      wide
     >
       {done.map((row, index) => (
         <CorrectionSet

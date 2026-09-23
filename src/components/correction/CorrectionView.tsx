@@ -3,17 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AnswerProse } from "@/components/correction/AnswerProse";
+import { CommentBody } from "@/components/correction/CommentBody";
 import { CommentSheet } from "@/components/correction/CommentSheet";
 import { ScoreRing } from "@/components/correction/ScoreRing";
-import {
-  ACCENT,
-  CARD,
-  DOT,
-  ORDER,
-  markLabel,
-  numbered,
-  type Severity,
-} from "@/components/correction/tone";
+import { CARD, DOT, ORDER, numbered, type Severity } from "@/components/correction/tone";
 import { ManuscriptGrid } from "@/components/manuscript/ManuscriptGrid";
 import { useFittedCellSize } from "@/components/manuscript/useFittedCellSize";
 import { layoutManuscript } from "@/lib/manuscript/layout";
@@ -284,33 +277,7 @@ export function CorrectionView({
                         : "hover:border-neutral-400",
                     ].join(" ")}
                   >
-                    <span
-                      className={`shrink-0 font-bold tabular-nums ${ACCENT[severity]}`}
-                    >
-                      {markLabel(comment.index)}
-                    </span>
-
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-baseline gap-x-2 text-xs text-neutral-500">
-                        <span className="font-medium text-neutral-700">{comment.category}</span>
-                        <span>{SEVERITY_LABEL[severity]}</span>
-                        <span className="ml-auto">
-                          {comment.start + 1}~{comment.end}자
-                        </span>
-                      </span>
-
-                      <span className="mt-1 block border-l-2 border-neutral-300 pl-2 text-neutral-500 italic">
-                        “{answerText.slice(comment.start, comment.end)}”
-                      </span>
-
-                      <span className="mt-1.5 block leading-6">{comment.message}</span>
-
-                      {comment.suggestion ? (
-                        <span className="mt-1.5 block rounded-md bg-white/80 px-2 py-1 leading-6">
-                          <b className="text-neutral-500">고쳐 쓰면</b> {comment.suggestion}
-                        </span>
-                      ) : null}
-                    </span>
+                    <CommentBody comment={comment} answerText={answerText} />
                   </button>
                 </li>
               );
