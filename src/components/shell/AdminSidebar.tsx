@@ -35,6 +35,11 @@ const LINKS = [
     label: "원고지",
     path: "M4 4h16v16H4zM4 9.5h16M4 15h16M9.5 4v16M15 4v16",
   },
+  {
+    href: "/admin/answer-sheet",
+    label: "답안지 채우기",
+    path: "M6 3h12v18H6zM9 8h6M9 12h6M9 16h3",
+  },
 ];
 
 export interface AdminCounts {

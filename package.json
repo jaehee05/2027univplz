@@ -35,10 +35,12 @@
     "check:quote": "tsx --conditions=react-server scripts/check-quote.ts",
     "show:prompt": "tsx scripts/show-prompt.ts",
     "check:split": "tsx --conditions=react-server scripts/check-split.ts",
-    "check:pages": "tsx scripts/check-pages.ts"
+    "check:pages": "tsx scripts/check-pages.ts",
+    "check:sheet": "tsx scripts/check-answer-sheet.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
+    "@pdf-lib/fontkit": "^1.1.1",
     "fflate": "^0.8.3",
     "firebase": "^12.18.0",
     "firebase-admin": "^14.3.0",
