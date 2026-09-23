@@ -48,6 +48,11 @@ export function ManuscriptEditor({
     [value, layout, lengthRule],
   );
   const range = lengthRule ? lengthRange(lengthRule) : null;
+  // 분량 경고는 글 끝 글자에 괄호를 쳐 봐야 무슨 뜻인지 모른다 — 칸 수 표시와 아래 목록으로 알린다.
+  const cellIssues = useMemo(
+    () => issues.filter((issue) => issue.rule !== "LENGTH_OVER" && issue.rule !== "LENGTH_UNDER"),
+    [issues],
+  );
 
   const rows = useMemo(() => {
     const planned = lengthRule ? planRows(spec, lengthRule) : layout.usedRows + spec.extraLines;
@@ -110,7 +115,7 @@ export function ManuscriptEditor({
           lengthRule={lengthRule}
           label={label}
           caretOffset={caret}
-          issues={issues}
+          issues={cellIssues}
           cellSize={cellSize}
           onCellSelect={readOnly ? undefined : (offset) => setPendingCaret(offset)}
         />

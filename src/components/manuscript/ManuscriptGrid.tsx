@@ -182,6 +182,12 @@ export function ManuscriptGrid({
 
   const caretKey = useMemo(() => {
     if (caretOffset == null) return null;
+    // 방금 쓴 글자(커서 바로 앞)의 칸을 짚는다. 칸을 누르면 커서가 그 칸 뒤로 가니 누른 칸이 짚인다.
+    // 커서 앞이 줄바꿈이거나 글 머리면 커서가 선 칸을 짚는다.
+    const before = caretOffset - 1;
+    for (const cell of layout.cells) {
+      if (before >= cell.start && before < cell.end) return `${cell.row}:${cell.col}`;
+    }
     for (const cell of layout.cells) {
       if (caretOffset >= cell.start && caretOffset < cell.end) return `${cell.row}:${cell.col}`;
     }
