@@ -53,6 +53,25 @@ console.log("\n=== 3. 숫자·영문 한 칸 두 자 ===");
   check("UN 한 칸", packed.includes("UN"));
 }
 
+console.log("\n=== 3-1. 소수는 소수점까지 뒤에서부터 두 자 ===");
+{
+  const cases: [string, string[]][] = [
+    ["0.5", ["0", ".5"]],
+    ["3.75", ["3.", "75"]],
+    ["12.5", ["12", ".5"]],
+    ["1.125", ["1", ".1", "25"]],
+  ];
+  for (const [number, expected] of cases) {
+    const texts = layoutManuscript(`약 ${number}배`, DEFAULT_SPEC).cells
+      .filter((c) => c.kind === "text").map((c) => c.text).slice(1, -1);
+    check(`${number} → ${expected.join("|")}`, texts.join("|") === expected.join("|"), texts.join("|"));
+  }
+  // ".5" 조각이 줄 첫 칸에 와도 앞 칸에 붙지 않는다
+  const { layout } = render("가".repeat(33) + "0.5");
+  const head = layout.cells.find((c) => c.row === 1 && c.col === 0);
+  check("줄머리 .5 는 제 칸에", head?.text === ".5", head?.text ?? "없음");
+}
+
 console.log("\n=== 4. 문장부호는 줄 첫 칸에 오지 않는다 ===");
 {
   // 첫 줄 35칸을 정확히 채우고 다음이 마침표가 되도록 만든다

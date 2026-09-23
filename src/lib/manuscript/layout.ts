@@ -59,11 +59,16 @@ const TRAILING_FORBIDDEN = new Set([
 const isSpace = (ch: string) => ch === " " || ch === "\t" || ch === "　";
 const isAlnum = (ch: string) => /[0-9A-Za-z]/.test(ch);
 
+/** 소수 — 소수점도 숫자와 함께 두 자씩 묶는다. */
+const DECIMAL = /^\d+\.\d+/;
+
 interface Token {
   text: string;
   start: number;
   end: number;
   kind: "text" | "space" | "break";
+  /** 소수 조각. ".5"처럼 점으로 시작해도 문장부호가 아니다. */
+  numeric?: boolean;
 }
 
 /** 원문을 칸 단위 토큰으로 나눈다. 숫자·영문은 한 칸에 두 자씩 묶는다. */
@@ -82,6 +87,20 @@ function tokenize(source: string): Token[] {
     if (isSpace(ch)) {
       tokens.push({ text: " ", start: i, end: i + 1, kind: "space" });
       i += 1;
+      continue;
+    }
+    const decimal = DECIMAL.exec(source.slice(i));
+    if (decimal) {
+      // 뒤에서부터 두 자씩 묶는다 — 0.5 → 0|.5, 3.75 → 3.|75
+      const end = i + decimal[0].length;
+      let from = i;
+      let to = i + (decimal[0].length % 2 || 2);
+      while (from < end) {
+        tokens.push({ text: source.slice(from, to), start: from, end: to, kind: "text", numeric: true });
+        from = to;
+        to += 2;
+      }
+      i = end;
       continue;
     }
     if (isAlnum(ch)) {
@@ -107,6 +126,7 @@ function tokenize(source: string): Token[] {
  *  · 줄 첫 칸의 띄어쓰기는 칸을 쓰지 않음
  *  · 마침표·쉼표 뒤의 띄어쓰기는 칸을 쓰지 않음 (물음표·느낌표 뒤는 한 칸 비움)
  *  · 숫자·영문은 한 칸에 두 자
+ *  · 소수는 소수점까지 뒤에서부터 두 자씩 (0.5 → 0|.5, 3.75 → 3.|75)
  */
 export function layoutManuscript(source: string, spec: ManuscriptSpec): LayoutResult {
   const cells: Cell[] = [];
@@ -166,7 +186,7 @@ export function layoutManuscript(source: string, spec: ManuscriptSpec): LayoutRe
     const head = token.text[0];
 
     // 줄 첫 칸에 올 수 없는 문장부호 → 앞 칸에 병기
-    if (col === 0 && LEADING_FORBIDDEN.has(head) && cells.length > 0) {
+    if (col === 0 && !token.numeric && LEADING_FORBIDDEN.has(head) && cells.length > 0) {
       const previous = cells[cells.length - 1];
       previous.appended += token.text;
       previous.end = token.end;
