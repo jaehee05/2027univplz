@@ -12,7 +12,8 @@ export const metadata: Metadata = { title: "첨삭 결과지" };
 
 /**
  * 첨삭지 한 벌 — 문항 하나. 세로 A4.
- * 화면의 '줄글' 보기와 같은 모양이다 — 왼쪽은 형광펜을 칠한 답안, 오른쪽은 코멘트 카드.
+ * 화면의 '줄글' 보기와 같은 모양이다 — 형광펜을 칠한 답안 아래에 코멘트 카드.
+ * 총평부터 고쳐 쓴 예시까지는 선생님 손글씨 글꼴로 쓴다.
  */
 function CorrectionSet({
   assignment,
@@ -100,12 +101,12 @@ function CorrectionSet({
           </div>
         </div>
 
-        {/* 답안과 첨삭 — 화면의 줄글 보기처럼 나란히 */}
-        <div className="mt-4 grid grid-cols-[minmax(0,1fr)_68mm] gap-4">
-          <div className="min-w-0 rounded-lg border border-neutral-200 px-3 py-1 text-[10pt]">
+        {/* 답안은 줄글에 형광펜, 코멘트 카드는 그 아래에 */}
+        <div className="mt-4">
+          <div className="rounded-lg border border-neutral-200 px-4 py-1">
             <AnswerProse text={text} comments={comments} activeIndex={null} />
           </div>
-          <ul className="space-y-1.5 text-[8pt] leading-snug [&_.leading-6]:leading-[1.45]">
+          <ul className="mt-4 space-y-2 text-[9pt] leading-snug">
             {comments.map((comment) => (
               <li
                 key={comment.index}
@@ -117,7 +118,7 @@ function CorrectionSet({
           </ul>
         </div>
 
-        <div className="mt-6">
+        <div className="font-hand mt-6">
         <h2 className="border-b border-neutral-400 pb-1 text-sm font-bold">
           [총평] {question.number}번
         </h2>

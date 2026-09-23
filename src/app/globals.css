@@ -34,6 +34,17 @@ body {
    화면과 같은 컴포넌트를 그대로 쓰되, 종이에 맞게 여백과 색만 손본다.
    원고지는 38칸이라 세로로는 칸이 작아져서, 답안지·첨삭지는 가로로 낸다.
    쪽마다 방향을 달리해야 해서 이름 붙인 @page 를 쓴다. */
+/* 선생님 손글씨 — 첨삭 결과지의 총평 · 고쳐 쓴 예시에 쓴다 */
+@font-face {
+  font-family: "TeacherHand";
+  src: url("/fonts/Victory-Medium.ttf") format("truetype");
+  font-display: swap;
+}
+
+.font-hand {
+  font-family: "TeacherHand", var(--font-sans, sans-serif);
+}
+
 @page {
   size: A4 portrait;
   margin: 15mm;

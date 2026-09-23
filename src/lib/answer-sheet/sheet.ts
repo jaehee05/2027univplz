@@ -141,6 +141,11 @@ export function fillGrid(grid: SheetGrid, text: string, literal: boolean): Fille
       // 숫자·영문 두 자 — 칸을 반씩 나눠 쓴다
       put(chars[0], x + cw * 0.04, cw * 0.46, y, rh, 0.82);
       put(chars[1], x + cw * 0.5, cw * 0.46, y, rh, 0.82);
+    } else if (chars.length === 3) {
+      // <가> 같은 표지 — 괄호와 글자를 한 칸에 나란히
+      put(chars[0], x, cw * 0.22, y, rh, 0.6);
+      put(chars[1], x + cw * 0.22, cw * 0.56, y, rh, 0.62);
+      put(chars[2], x + cw * 0.78, cw * 0.22, y, rh, 0.6);
     } else if (LOW_LEFT.has(cell.text)) {
       put(cell.text, x, cw * 0.5, y, rh);
     } else {

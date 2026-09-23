@@ -72,6 +72,18 @@ console.log("\n=== 3-1. 소수는 소수점까지 뒤에서부터 두 자 ===");
   check("줄머리 .5 는 제 칸에", head?.text === ".5", head?.text ?? "없음");
 }
 
+console.log("\n=== 3-2. <가> 같은 제시문 표지는 한 칸 ===");
+{
+  const texts = layoutManuscript("<가>와 〈나〉는 다르다", DEFAULT_SPEC).cells
+    .filter((c) => c.kind === "text").map((c) => c.text);
+  check("<가> 한 칸", texts[0] === "<가>", texts.join("|"));
+  check("〈나〉 한 칸", texts.includes("〈나〉"), texts.join("|"));
+  const pair = layoutManuscript("<가><나>", DEFAULT_SPEC).cells.filter((c) => c.kind === "text").map((c) => c.text);
+  check("<가><나> 붙여 써도 한 칸씩", pair.join("|") === "<가>|<나>", pair.join("|"));
+  const tail = layoutManuscript("가".repeat(33) + "<나>", DEFAULT_SPEC).cells.at(-1)!;
+  check("줄 끝 칸에 와도 내리지 않는다", tail.row === 0 && tail.text === "<나>", `${tail.row}:${tail.col}`);
+}
+
 console.log("\n=== 4. 문장부호는 줄 첫 칸에 오지 않는다 ===");
 {
   // 첫 줄 35칸을 정확히 채우고 다음이 마침표가 되도록 만든다

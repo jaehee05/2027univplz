@@ -308,7 +308,10 @@ export function ManuscriptGrid({
                           style={
                             slot.cell.text.length === 2
                               ? { fontSize: "calc(var(--cell) * 0.55)", letterSpacing: "-0.04em" }
-                              : undefined
+                              : slot.cell.text.length >= 3
+                                ? // <가> 같은 표지 — 괄호까지 한 칸에 넣는다
+                                  { fontSize: "calc(var(--cell) * 0.36)", letterSpacing: "-0.08em" }
+                                : undefined
                           }
                         >
                           {slot.cell.text}

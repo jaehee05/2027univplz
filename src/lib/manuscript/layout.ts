@@ -84,6 +84,9 @@ const TRAILING_FORBIDDEN = new Set([
 const isSpace = (ch: string) => ch === " " || ch === "\t" || ch === "　";
 const isAlnum = (ch: string) => /[0-9A-Za-z]/.test(ch);
 
+/** <가> · 〈나〉 · 《다》 — 제시문 표지는 괄호까지 한 칸 */
+const LABEL = /^(?:<[가-힣A-Za-z0-9]>|〈[가-힣A-Za-z0-9]〉|《[가-힣A-Za-z0-9]》)/;
+
 /** 소수 — 소수점도 숫자와 함께 두 자씩 묶는다. */
 const DECIMAL = /^\d+\.\d+/;
 
@@ -92,8 +95,11 @@ interface Token {
   start: number;
   end: number;
   kind: "text" | "space" | "break" | "linebreak";
-  /** 소수 조각. ".5"처럼 점으로 시작해도 문장부호가 아니다. */
-  numeric?: boolean;
+  /**
+   * 통째로 한 칸인 조각 — 소수 조각(".5")이나 <가> 같은 제시문 표지.
+   * 괄호·점으로 시작하거나 끝나도 문장부호로 다루지 않는다.
+   */
+  whole?: boolean;
 }
 
 /** 원문을 칸 단위 토큰으로 나눈다. 숫자·영문은 한 칸에 두 자씩 묶는다. */
@@ -119,6 +125,13 @@ function tokenize(source: string, literal: boolean): Token[] {
       i += 1;
       continue;
     }
+    const label = LABEL.exec(source.slice(i));
+    if (label) {
+      // <가> · 〈나〉 같은 제시문 표지는 한 칸에 쓴다
+      tokens.push({ text: label[0], start: i, end: i + 3, kind: "text", whole: true });
+      i += 3;
+      continue;
+    }
     const decimal = DECIMAL.exec(source.slice(i));
     if (decimal) {
       // 뒤에서부터 두 자씩 묶는다 — 0.5 → 0|.5, 3.75 → 3.|75
@@ -126,7 +139,7 @@ function tokenize(source: string, literal: boolean): Token[] {
       let from = i;
       let to = i + (decimal[0].length % 2 || 2);
       while (from < end) {
-        tokens.push({ text: source.slice(from, to), start: from, end: to, kind: "text", numeric: true });
+        tokens.push({ text: source.slice(from, to), start: from, end: to, kind: "text", whole: true });
         from = to;
         to += 2;
       }
@@ -156,6 +169,7 @@ function tokenize(source: string, literal: boolean): Token[] {
  *  · 줄 첫 칸의 띄어쓰기는 칸을 쓰지 않음
  *  · 마침표·쉼표 뒤의 띄어쓰기는 칸을 쓰지 않음 (물음표·느낌표 뒤는 한 칸 비움)
  *  · 숫자·영문은 한 칸에 두 자
+ *  · <가> 같은 제시문 표지는 괄호까지 한 칸
  *  · 소수는 소수점까지 뒤에서부터 두 자씩 (0.5 → 0|.5, 3.75 → 3.|75)
  */
 export function layoutManuscript(
@@ -232,7 +246,7 @@ export function layoutManuscript(
     const head = token.text[0];
 
     // 줄 첫 칸에 올 수 없는 문장부호 → 앞 칸에 병기
-    if (col === 0 && !token.numeric && LEADING_FORBIDDEN.has(head) && cells.length > 0) {
+    if (col === 0 && !token.whole && LEADING_FORBIDDEN.has(head) && cells.length > 0) {
       const previous = cells[cells.length - 1];
       previous.appended += token.text;
       previous.end = token.end;
@@ -241,7 +255,7 @@ export function layoutManuscript(
     }
 
     // 줄 마지막 칸에 올 수 없는 여는 괄호 → 다음 줄로
-    if (col === width() - 1 && TRAILING_FORBIDDEN.has(head)) {
+    if (col === width() - 1 && !token.whole && TRAILING_FORBIDDEN.has(head)) {
       row += 1;
       col = 0;
       notes.push({ kind: "BRACKET_PUSHED", offset: token.start });
@@ -292,7 +306,7 @@ export function layoutManuscript(
     leading = null;
 
     const head = token.text[0];
-    if (col === 0 && !token.numeric && LEADING_FORBIDDEN.has(head) && cells.length > 0) {
+    if (col === 0 && !token.whole && LEADING_FORBIDDEN.has(head) && cells.length > 0) {
       if (!forcedBreak) {
         // 줄이 꽉 차 넘어온 문장부호 — 학생이 앞 칸에 함께 쓴 것으로 본다.
         const previous = cells[cells.length - 1];
@@ -303,7 +317,7 @@ export function layoutManuscript(
       notes.push({ kind: "PUNCT_AT_LINE_START", offset: token.start });
     }
 
-    if (col === width() - 1 && TRAILING_FORBIDDEN.has(head)) {
+    if (col === width() - 1 && !token.whole && TRAILING_FORBIDDEN.has(head)) {
       notes.push({ kind: "BRACKET_AT_LINE_END", offset: token.start });
     }
 
